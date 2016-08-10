@@ -508,7 +508,7 @@ class ControlPanel {
         autoconnect.wasPressed = true;
       }
       //active buttons during DATASOURCE_NORMAL_W_AUX
-      if (eegDataSource == 0) {
+      if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
         if (popOut.isMouseHere()){
           popOut.setIsActive(true);
           popOut.wasPressed = true;
@@ -608,7 +608,8 @@ class ControlPanel {
         }
       }
 
-      if (eegDataSource == 3) {
+      if (eegDataSource == DATASOURCE_GANGLION) {
+        // This is where we check for button presses if we are searching for BLE devices
         println("yup");
       }
     }
@@ -822,6 +823,12 @@ public void system_init(){
         output("Trying to connect to ganglion"); // tell user that they need to select a file before the system can be started
         initSystemButton.wasPressed = false;
         initSystemButton.setIsActive(false);
+        // Reconfigure arrays and stuff for ganglion!
+        nchan = 4;
+        fftBuff = new FFT[nchan];  //reinitialize the FFT buffer
+        yLittleBuff_uV = new float[nchan][nPointsPerUpdate];
+        output("channel count set to " + str(nchan));
+        updateChannelArrays(nchan); //make sure to reinitialize the channel arrays with the right number of channels
       } else if (eegDataSource == -1) {//if no data source selected
         output("No DATA SOURCE selected. Please select a DATA SOURCE and retry system initiation.");//tell user they must select a data source before initiating system
         initSystemButton.wasPressed = false;

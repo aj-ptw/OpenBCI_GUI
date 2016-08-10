@@ -58,22 +58,44 @@ private float[] compressArray(DataPacket_ADS1299 data){
 // CLASSES //
 
 class UDPGanglion {
-  int port;
-  String ip;
+  int port = 10996;
+  String ip = "localhost";
   UDP udp;
 
-  UDPGanglion(int _port, String _ip){
-    port = _port;
-    ip = _ip;
+  UDPGanglion() {
     udp = new UDP(this, port);
-    udp.setBuffer(1024);
+    // udp.setBuffer(1024);
     udp.log(true);
     udp.listen(true);
+  }
+
+
+  void send(String message) {
+    // formats the message for Pd
+    message = message+";\n";
+    // send the message
+    udp.send( message, ip, port );
+  }
+
+
+  /**
+   * To perform any action on datagram reception, you need to implement this
+   * handler in your code. This method will be automatically called by the UDP
+   * object each time he receive a nonnull message.
+   */
+  void receive( byte[] data, String ip, int port ) {	// <-- extended handler
+    // get the "real" message =
+    // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
+    data = subset(data, 0, data.length-2);
+    String message = new String( data );
+
+    // print the result
+    println( "receive: \""+message+"\" from "+ip+" on port "+port );
   }
 }
 
 // UDP SEND //
-class UDPSend{
+class UDPSend {
   int port;
   String ip;
   UDP udp;

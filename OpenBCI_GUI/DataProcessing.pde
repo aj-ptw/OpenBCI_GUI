@@ -50,6 +50,18 @@ int getDataIfAvailable(int pointCounter) {
       pointCounter++; //increment counter for "little buffer"
     }
 
+  } else if (eegDataSource == DATASOURCE_GANGLION) {
+    //get data from ble as it streams in
+    //next, gather any new data into the "little buffer"
+    while ( (curDataPacketInd != lastReadDataPacketInd) && (pointCounter < nPointsPerUpdate)) {
+      lastReadDataPacketInd = (lastReadDataPacketInd + 1) % dataPacketBuff.length;  //increment to read the next packet
+      for (int Ichan=0; Ichan < nchan; Ichan++) {   //loop over each cahnnel
+        //scale the data into engineering units ("microvolts") and save to the "little buffer"
+        yLittleBuff_uV[Ichan][pointCounter] = dataPacketBuff[lastReadDataPacketInd].values[Ichan] * openBCI.get_scale_fac_uVolts_per_count();
+      }
+      pointCounter++; //increment counter for "little buffer"
+    }
+
   } else {
     // make or load data to simulate real time
 

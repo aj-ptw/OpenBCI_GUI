@@ -387,6 +387,7 @@ void initSystem() {
 
   //open data file
   if (eegDataSource == DATASOURCE_NORMAL_W_AUX) openNewLogFile(fileName);  //open a new log file
+  if (eegDataSource == DATASOURCE_GANGLION) println("open ganglion output file");
 
   nextPlayback_millis = millis(); //used for synthesizeData and readFromFile.  This restarts the clock that keeps the playback at the right pace.
 
@@ -416,9 +417,12 @@ void haltSystem() {
 
   // stopDataTransfer(); // make sure to stop data transfer, if data is streaming and being drawn
 
-  if ((eegDataSource == DATASOURCE_NORMAL) || (eegDataSource == DATASOURCE_NORMAL_W_AUX)) {
+  if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
     closeLogFile();  //close log file
     openBCI.closeSDandSerialPort();
+  }
+  if (eegDataSource == DATASOURCE_GANGLION) {
+    println("closed ganglion file");
   }
   systemMode = 0;
 }
@@ -547,7 +551,6 @@ void systemDraw() { //for drawing to the screen
 
       //update the title of the figure;
       switch (eegDataSource) {
-      case DATASOURCE_NORMAL:
       case DATASOURCE_NORMAL_W_AUX:
         surface.setTitle(int(frameRate) + " fps, Byte Count = " + openBCI_byteCount + ", bit rate = " + byteRate_perSec*8 + " bps" + ", " + int(float(fileoutput.getRowsWritten())/openBCI.get_fs_Hz()) + " secs Saved, Writing to " + output_fname);
         break;
@@ -556,6 +559,9 @@ void systemDraw() { //for drawing to the screen
         break;
       case DATASOURCE_PLAYBACKFILE:
         surface.setTitle(int(frameRate) + " fps, Playing " + int(float(currentTableRowIndex)/openBCI.get_fs_Hz()) + " of " + int(float(playbackData_table.getRowCount())/openBCI.get_fs_Hz()) + " secs, Reading from: " + playbackData_fname);
+        break;
+      case DATASOURCE_GANGLION:
+        surface.setTitle(int(frameRate) + " fps, Ganglion!");
         break;
       }
     }
