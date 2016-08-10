@@ -17,11 +17,11 @@ HashMap<String,float[][]> processed_file;
 void process_input_file() throws Exception{
   processed_file = new HashMap<String, float[][]>();
   float localLittleBuff[][] = new float[nchan][nPointsPerUpdate];
-  
+
   try{
     while(!hasRepeated){
       currentTableRowIndex=getPlaybackDataFromTable(playbackData_table, currentTableRowIndex, openBCI.get_scale_fac_uVolts_per_count(), dataPacketBuff[lastReadDataPacketInd]);
-    
+
       for (int Ichan=0; Ichan < nchan; Ichan++) {
         //scale the data into engineering units..."microvolts"
         localLittleBuff[Ichan][pointCounter] = dataPacketBuff[lastReadDataPacketInd].values[Ichan]* openBCI.get_scale_fac_uVolts_per_count();
@@ -29,7 +29,7 @@ void process_input_file() throws Exception{
     }
   }
   catch (Exception e){throw new Exception();}
-  
+
   println("Finished filling hashmap");
   has_processed = true;
 }
@@ -38,7 +38,7 @@ void process_input_file() throws Exception{
 
 int getDataIfAvailable(int pointCounter) {
 
-  if ( (eegDataSource == DATASOURCE_NORMAL) || (eegDataSource == DATASOURCE_NORMAL_W_AUX) ) {
+  if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
     //get data from serial port as it streams in
     //next, gather any new data into the "little buffer"
     while ( (curDataPacketInd != lastReadDataPacketInd) && (pointCounter < nPointsPerUpdate)) {
@@ -49,7 +49,7 @@ int getDataIfAvailable(int pointCounter) {
       }
       pointCounter++; //increment counter for "little buffer"
     }
-   
+
   } else {
     // make or load data to simulate real time
 
@@ -81,7 +81,7 @@ int getDataIfAvailable(int pointCounter) {
           //scale the data into engineering units..."microvolts"
           yLittleBuff_uV[Ichan][pointCounter] = dataPacketBuff[lastReadDataPacketInd].values[Ichan]* openBCI.get_scale_fac_uVolts_per_count();
         }
-        
+
         pointCounter++;
       } //close the loop over data points
       //if (eegDataSource==DATASOURCE_PLAYBACKFILE) println("OpenBCI_GUI: getDataIfAvailable: currentTableRowIndex = " + currentTableRowIndex);
@@ -222,7 +222,7 @@ void initializeFFTObjects(FFT[] fftBuff, float[][] dataBuffY_uV, int N, float fs
     if (isFFTFiltered == true) {
       fooData = dataBuffY_filtY_uV[Ichan];  //use the filtered data for the FFT
     } else {
-      fooData = dataBuffY_uV[Ichan];  //use the raw data for the FFT      
+      fooData = dataBuffY_uV[Ichan];  //use the raw data for the FFT
     }
     fooData = Arrays.copyOfRange(fooData, fooData.length-Nfft, fooData.length);
     fftBuff[Ichan].forward(fooData); //compute FFT on this channel of data
@@ -258,10 +258,10 @@ int getPlaybackDataFromTable(Table datatable, int currentTableRowIndex, float sc
       curDataPacket.values[Ichan] = (int) (0.5f+ val_uV / scale_fac_uVolts_per_count); //convert to counts, the 0.5 is to ensure rounding
     }
     if(!isOldData) curTimestamp = row.getString(nchan+3);
-    
+
     //int localnchan = nchan;
-    
-    
+
+
     //try{
     //  while(true){
     //    println("VALUE: " + row.getString(localnchan));
@@ -447,15 +447,15 @@ class DataProcessing {
       data_std_uV[Ichan]=std(fooData_filt); //compute the standard deviation for the whole array "fooData_filt"
     } //close loop over channels
 
-    
+
     // calculate FFT after filter
-    
+
     //println("PPP" + fftBuff[0].specSize());
     float prevFFTdata[] = new float[fftBuff[0].specSize()];
     double foo;
-  
+
     //update the FFT (frequency spectrum)
-    for (int Ichan=0; Ichan < nchan; Ichan++) {  
+    for (int Ichan=0; Ichan < nchan; Ichan++) {
 
     //copy the previous FFT data...enables us to apply some smoothing to the FFT data
     for (int I=0; I < fftBuff[Ichan].specSize(); I++) prevFFTdata[I] = fftBuff[Ichan].getBand(I); //copy the old spectrum values
@@ -465,7 +465,7 @@ class DataProcessing {
     if (isFFTFiltered == true) {
       fooData = dataBuffY_filtY_uV[Ichan];  //use the filtered data for the FFT
     } else {
-      fooData = dataBuffY_uV[Ichan];  //use the raw data for the FFT      
+      fooData = dataBuffY_uV[Ichan];  //use the raw data for the FFT
     }
     fooData = Arrays.copyOfRange(fooData, fooData.length-Nfft, fooData.length);   //trim to grab just the most recent block of data
     float meanData = mean(fooData);  //compute the mean
@@ -474,35 +474,35 @@ class DataProcessing {
     //compute the FFT
     fftBuff[Ichan].forward(fooData); //compute FFT on this channel of data
 
-    //convert to uV_per_bin...still need to confirm the accuracy of this code.  
+    //convert to uV_per_bin...still need to confirm the accuracy of this code.
     //Do we need to account for the power lost in the windowing function?   CHIP  2014-10-24
     for (int I=0; I < fftBuff[Ichan].specSize(); I++) {  //loop over each FFT bin
       fftBuff[Ichan].setBand(I, (float)(fftBuff[Ichan].getBand(I) / fftBuff[Ichan].specSize()));
-    }       
+    }
 
     //average the FFT with previous FFT data so that it makes it smoother in time
     double min_val = 0.01d;
     for (int I=0; I < fftBuff[Ichan].specSize(); I++) {   //loop over each fft bin
       if (prevFFTdata[I] < min_val) prevFFTdata[I] = (float)min_val; //make sure we're not too small for the log calls
-      foo = fftBuff[Ichan].getBand(I); 
+      foo = fftBuff[Ichan].getBand(I);
       if (foo < min_val) foo = min_val; //make sure this value isn't too small
 
       if (true) {
         //smooth in dB power space
         foo =   (1.0d-smoothFac[smoothFac_ind]) * java.lang.Math.log(java.lang.Math.pow(foo, 2));
-        foo += smoothFac[smoothFac_ind] * java.lang.Math.log(java.lang.Math.pow((double)prevFFTdata[I], 2)); 
+        foo += smoothFac[smoothFac_ind] * java.lang.Math.log(java.lang.Math.pow((double)prevFFTdata[I], 2));
         foo = java.lang.Math.sqrt(java.lang.Math.exp(foo)); //average in dB space
-      } else { 
+      } else {
         //smooth (average) in linear power space
         foo =   (1.0d-smoothFac[smoothFac_ind]) * java.lang.Math.pow(foo, 2);
-        foo+= smoothFac[smoothFac_ind] * java.lang.Math.pow((double)prevFFTdata[I], 2); 
+        foo+= smoothFac[smoothFac_ind] * java.lang.Math.pow((double)prevFFTdata[I], 2);
         // take sqrt to be back into uV_rtHz
         foo = java.lang.Math.sqrt(foo);
       }
       fftBuff[Ichan].setBand(I, (float)foo); //put the smoothed data back into the fftBuff data holder for use by everyone else
     } //end loop over FFT bins
   } //end the loop over channels.
-  
+
 
     //find strongest channel
     int refChanInd = findMax(data_std_uV);

@@ -57,6 +57,21 @@ private float[] compressArray(DataPacket_ADS1299 data){
 //////////////
 // CLASSES //
 
+class UDPGanglion {
+  int port;
+  String ip;
+  UDP udp;
+
+  UDPGanglion(int _port, String _ip){
+    port = _port;
+    ip = _ip;
+    udp = new UDP(this, port);
+    udp.setBuffer(1024);
+    udp.log(true);
+    udp.listen(true);
+  }
+}
+
 // UDP SEND //
 class UDPSend{
   int port;
