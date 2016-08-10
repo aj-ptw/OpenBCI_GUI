@@ -1,7 +1,7 @@
 //////////////////////////////////////////////////////////////////////////
 //
 //    Networking
-//    - responsible for sending data over a Network 
+//    - responsible for sending data over a Network
 //    - Three types of networks are available:
 //        - UDP
 //        - OSC
@@ -19,20 +19,20 @@ float[] full_message;
 public void sendRawData_dataPacket(DataPacket_ADS1299 data, float scale_to_uV, float scale_for_aux) {
   data_to_send = writeValues(data.values,scale_to_uV);
   aux_to_send = writeValues(data.auxValues,scale_for_aux);
-  
+
   full_message = compressArray(data);     //Collect packet into full_message array
-  
+
   //send to appropriate network type
   if (networkType == 1){
     udp.send_message(data_to_send);       //Send full message to udp
   }else if (networkType == 2){
     osc.send_message(data_to_send);       //Send full message to osc
   }else if (networkType == 3){
-    lsl.send_message(data_to_send,aux_to_send);       //Send 
+    lsl.send_message(data_to_send,aux_to_send);       //Send
   }
 }
 // Convert counts to scientific values (uV or G)
-private float[] writeValues(int[] values, float scale_fac) {          
+private float[] writeValues(int[] values, float scale_fac) {
   int nVal = values.length;
   float[] temp_buffer = new float[nVal];
   for (int Ival = 0; Ival < nVal; Ival++) {
@@ -62,7 +62,7 @@ class UDPSend{
   int port;
   String ip;
   UDP udp;
-  
+
   UDPSend(int _port, String _ip){
     port = _port;
     ip = _ip;
@@ -83,7 +83,7 @@ class OSCSend{
   String address;
   OscP5 osc;
   NetAddress netaddress;
-  
+
   OSCSend(int _port, String _ip, String _address){
     port = _port;
     ip = _ip;
@@ -108,7 +108,7 @@ class LSLSend{
   LSL.StreamOutlet outlet_data;
   LSL.StreamInfo info_aux;
   LSL.StreamOutlet outlet_aux;
-  
+
   LSLSend(String _data_stream, String _aux_stream){
     data_stream = _data_stream;
     data_stream_id = data_stream + "_id";
@@ -124,4 +124,3 @@ class LSLSend{
     //outlet_aux.push_sample(_aux_message);
   }
 }
-  
