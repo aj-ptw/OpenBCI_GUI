@@ -10,13 +10,6 @@
 //
 /////////////////////////////////////////////////////////////////////////////
 
-
-final String command_stop = "s";
-final String command_startBinary = "b";
-
-final String[] command_deactivate_channel = {"1", "2", "3", "4"};
-final String[] command_activate_channel = {"!", "@", "#", "$"};
-
 class OpenBCI_Ganglion {
   final static byte BYTE_START = (byte)0xA0;
   final static byte BYTE_END = (byte)0xC0;
@@ -26,11 +19,11 @@ class OpenBCI_Ganglion {
   OpenBCI_Ganglion(PApplet applet, String uuid) {
     printGanglion("starting");
 
-    connectBLE(applet, uuid);
+    connectUDP(applet, uuid);
   }
 
-  private void connectBLE(PApplet applet, String uuid) {
-    printGanglion("connected");
+  private void connectUDP(PApplet applet, String uuid) {
+    printGanglion("connected to UDP with uuid: " + uuid);
     systemMode = 10;
   }
 
@@ -38,7 +31,7 @@ class OpenBCI_Ganglion {
 
   }
 
-  private void printGanglion(String[] msg) {
+  private void printGanglion(String msg) {
     print("OpenBCI_Ganglion: "); println(msg);
   }
 };

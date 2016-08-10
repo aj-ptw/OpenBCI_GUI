@@ -85,6 +85,9 @@ OpenBCI_ADS1299 openBCI = new OpenBCI_ADS1299(); //dummy creation to get access 
 String openBCI_portName = "N/A";  //starts as N/A but is selected from control panel to match your OpenBCI USB Dongle's serial/COM
 int openBCI_baud = 115200; //baud rate from the Arduino
 
+OpenBCI_Ganglion ganglion = new OpenBCI_Ganglion(); //dummy creation to get access to constants, create real one later
+
+
 ////// ---- Define variables related to OpenBCI board operations
 //Define number of channels from openBCI...first EEG channels, then aux channels
 int nchan = 8; //Normally, 8 or 16.  Choose a smaller number to show fewer on the GUI
@@ -370,7 +373,7 @@ void initSystem() {
     playbackData_table.removeColumn(0);
     break;
   case DATASOURCE_GANGLION:
-    println("OpenBCI_GUI: initSystem: starting Ganglion");
+    ganglion = new OpenBCI_Ganglion(this, "taco"); //this also starts the data transfer after XX seconds
     break;
   default:
   }
