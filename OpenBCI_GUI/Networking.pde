@@ -57,40 +57,88 @@ private float[] compressArray(DataPacket_ADS1299 data){
 //////////////
 // CLASSES //
 
-class UDPGanglion {
-  int port = 10996;
-  String ip = "localhost";
+class UDPClass {
+  Method udpEventMethod;
+  PApplet parent;
+  int port;
+  String ip;
   UDP udp;
 
-  UDPGanglion() {
-    udp = new UDP(this, port);
-    // udp.setBuffer(1024);
-    udp.log(true);
-    udp.listen(true);
+  /**
+   * @description Used to construct a new UDP connection
+   * @param `parent` {PApplet} - The object calling constructor. Implements
+   *  `udpEvent` if `parent` wants to recieve messages.
+   * @param `port` {int} - The port number to use for the UDP port
+   * @param `ip` {String} - The ip address for the UDP connection. Use `localhost`
+   *  to keep the port on this computer.
+   * @constructor
+   */
+  public UDPClass(PApplet parent, int port, String ip) {
+    // Grab vars
+    this.port  = port;
+    this.ip = ip;
+
+    this.udp = new UDP(this, port);
+    this.udp.setBuffer(1024);
+    this.udp.log(true);
+
+
+    // callback: https://forum.processing.org/one/topic/noob-q-i-d-like-to-learn-more-about-callbacks.html
+    // Set parent for callback
+    this.parent = parent;
+
+    // Verify that parent actaully implements the callback
+    try {
+      this.udpEventMethod = this.parent.getClass().getMethod("udpEvent");
+      this.udp.listen(true);
+    }
+    catch (Exception e) {
+      // No such method declared, there for the parent who created this will not
+      //  recieve messages :(
+      println("Networking: UDP will not listen/receive messages");
+      this.udp.listen(false);
+    }
+
   }
 
 
-  void send(String message) {
+  public void send(String message) {
     // formats the message for Pd
     message = message+";\n";
     // send the message
-    udp.send( message, ip, port );
+    this.udp.send( message, ip, port );
   }
 
 
   /**
    * To perform any action on datagram reception, you need to implement this
    * handler in your code. This method will be automatically called by the UDP
-   * object each time he receive a nonnull message.
+   * object each time he receive a nonnull message. This method will send the
+   * message to `udpEvent`
    */
-  void receive( byte[] data, String ip, int port ) {	// <-- extended handler
+  void receive(byte[] data, String ip, int port) {	// <-- extended handler
     // get the "real" message =
     // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
     data = subset(data, 0, data.length-2);
     String message = new String( data );
 
     // print the result
-    println( "receive: \""+message+"\" from "+ip+" on port "+port );
+    // println( "receive: \""+message+"\" from "+ip+" on port "+port );
+
+    println("Calling " + this.udpEventMethod);
+
+    // Be safe, always check to make sure the parent did implement this function
+    if (this.udpEventMethod != null) {
+      try {
+        this.udpEventMethod.invoke(this.parent, message);
+      }
+      catch (Exception e) {
+        System.err.println("Disabling udpEvent() for because of an error.");
+        e.printStackTrace();
+        this.udpEventMethod = null;
+      }
+    }
+
   }
 }
 
