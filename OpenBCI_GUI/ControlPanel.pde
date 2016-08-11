@@ -1034,10 +1034,7 @@ class BLEBox {
     bleList.setPosition(x + padding, y + padding*3 + 13 + 24);
     // Call to update the list
     ganglion.getBLEDevices();
-    for (int i = 0; i < bleDevices.length; i++) {
-      String tempPort = bleDevices[(bleDevices.length-1) - i]; //list backwards... because usually our port is at the bottom
-      bleDevices.addItem(makeItem(tempPort));
-    }
+
   }
 
   public void update() {
@@ -1075,7 +1072,7 @@ class BLEBox {
     bleList.items.clear();
     for (int i = 0; i < bleDevices.length; i++) {
       String tempPort = bleDevices[(bleDevices.length-1) - i]; //list backwards... because usually our port is at the bottom
-      bleDevices.addItem(makeItem(tempPort));
+      bleList.addItem(makeItem(tempPort));
     }
     bleList.updateMenu();
   }

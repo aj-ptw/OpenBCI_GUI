@@ -12,7 +12,13 @@
 
 // import java.io.OutputStream; //for logging raw bytes to an output file
 
+//------------------------------------------------------------------------
+//                       Global Functions
+//------------------------------------------------------------------------
+
+// println("GanglionSync: parent" + parent);
 void udpEvent(String msg) {
+  println("GanglionSync: udpEvent");
   ganglion.parseMessage(msg);
 }
 
@@ -56,8 +62,8 @@ class OpenBCI_Ganglion {
   OpenBCI_Ganglion(PApplet applet) {
 
     // Initialize UDP ports
-    udpRx = new UDPClass(applet, udpGanglionPortRx, udpGanglionIP);
-    udpTx = new UDPClass(applet, udpGanglionPortTx, udpGanglionIP);
+    udpRx = new UDPClass(applet, udpGanglionPortRx, udpGanglionIP, true);
+    udpTx = new UDPClass(applet, udpGanglionPortTx, udpGanglionIP, false);
 
   }
 

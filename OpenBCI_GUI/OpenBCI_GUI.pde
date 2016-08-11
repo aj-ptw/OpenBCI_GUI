@@ -679,6 +679,11 @@ void introAnimation() {
   popStyle();
 }
 
+void udpEvent(String msg) {
+  println("GanglionSync: udpEvent");
+  ganglion.parseMessage(msg);
+}
+
 //CODE FOR FIXING WEIRD EXIT CRASH ISSUE -- 7/27/16 ===========================
 boolean mouseInFrame = false;
 boolean windowOriginSet = false;

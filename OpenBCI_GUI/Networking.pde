@@ -63,6 +63,7 @@ class UDPClass {
   PApplet parent;
   int port;
   String ip;
+  boolean listen;
   UDP udp;
 
   /**
@@ -74,10 +75,11 @@ class UDPClass {
    *  to keep the port on this computer.
    * @constructor
    */
-  public UDPClass(PApplet parent, int port, String ip) {
+  public UDPClass(PApplet parent, int port, String ip, boolean listen) {
     // Grab vars
     this.port  = port;
     this.ip = ip;
+    this.listen = listen;
 
     this.udp = new UDP(this, port);
     this.udp.setBuffer(1024);
@@ -87,16 +89,22 @@ class UDPClass {
     // callback: https://forum.processing.org/one/topic/noob-q-i-d-like-to-learn-more-about-callbacks.html
     // Set parent for callback
     this.parent = parent;
+    println("parent " + parent);
 
-    // Verify that parent actaully implements the callback
-    try {
-      this.udpEventMethod = this.parent.getClass().getMethod("udpEvent");
-      this.udp.listen(true);
-    }
-    catch (Exception e) {
-      // No such method declared, there for the parent who created this will not
-      //  recieve messages :(
-      println("Networking: UDP will not listen/receive messages");
+    if (listen) {
+      // Verify that parent actaully implements the callback
+      try {
+        this.udpEventMethod = this.parent.getClass().getMethod("udpEvent");
+        this.udp.listen(true);
+      }
+      catch (Exception e) {
+        // No such method declared, there for the parent who created this will not
+        //  recieve messages :(
+        println("Networking: UDP will not listen/receive messages");
+        this.udp.listen(false);
+      }
+    } else {
+      println("Networking: UDP not configured to listen");
       this.udp.listen(false);
     }
 
