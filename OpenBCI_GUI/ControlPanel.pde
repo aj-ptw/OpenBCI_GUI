@@ -224,6 +224,7 @@ class ControlPanel {
   SDConverterBox sdConverterBox;
   NetworkingBox networkingBoxPlayback;
 
+  BLEBox bleBox;
 
   SDBox sdBox;
 
@@ -280,6 +281,10 @@ class ControlPanel {
     pollPopup = new PollPopup(x+w,y,w,h,globalPadding);
 
     initBox = new InitBox(x, (dataSourceBox.y + dataSourceBox.h), w, h, globalPadding);
+
+    // Ganglion shi*
+    bleBox = new BLEBox(x + w, dataSourceBox.y, w, h, globalPadding);
+
   }
 
   public void update() {
@@ -299,6 +304,7 @@ class ControlPanel {
     //update all boxes if they need to be
     dataSourceBox.update();
     serialBox.update();
+    bleBox.update();
     dataLogBox.update();
     channelCountBox.update();
     sdBox.update();
@@ -309,6 +315,7 @@ class ControlPanel {
 
     channelPopup.update();
     serialList.updateMenu();
+    bleList.updateMenu();
 
     //SD File Conversion
     while (convertingSD == true) {
@@ -480,6 +487,10 @@ class ControlPanel {
         cp5Popup.get(MenuList.class, "channelList").setVisible(false);
         cp5Popup.get(MenuList.class, "pollList").setVisible(false);
       }
+    } else if (eegDataSource == DATASOURCE_GANGLION) {
+      bleBox.draw();
+      cp5.get(MenuList.class, "bleList").setVisible(true); //make sure the bleList menulist is visible
+
     } else {
       cp5.setVisible(false); // if isRunning is true, hide all controlP5 elements
       cp5Popup.setVisible(false);
@@ -1039,16 +1050,17 @@ class BLEBox {
 
   public void update() {
     // Quick check to see if there are just more or less devices in general
-    if (bleDevices.length != ganglion.deviceList.length) {
-      refreshBLEList();
-    } else {
-      for (int i = 0; i < ganglion.deviceList.length; i++) {
-        if (ganglion.deviceList[i] != bleDevices[i]) {
-          refreshBLEList();
-          break;
-        }
-      }
-    }
+    // println("length " + ganglion);
+    // if (bleDevices.length != ganglion.deviceList.length) {
+    //   refreshBLEList();
+    // } else {
+    //   for (int i = 0; i < ganglion.deviceList.length; i++) {
+    //     if (ganglion.deviceList[i] != bleDevices[i]) {
+    //       refreshBLEList();
+    //       break;
+    //     }
+    //   }
+    // }
   }
 
   public void draw() {

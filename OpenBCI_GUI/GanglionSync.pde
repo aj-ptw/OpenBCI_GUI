@@ -51,7 +51,7 @@ class OpenBCI_Ganglion {
   private UDPClass udpTx = null;
   private boolean portIsOpen = false;
 
-  public String[] deviceList;
+  public String[] deviceList = new String[0];
   public int numberOfDevices = 0;
 
   //constructors

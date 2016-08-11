@@ -89,7 +89,6 @@ class UDPClass {
     // callback: https://forum.processing.org/one/topic/noob-q-i-d-like-to-learn-more-about-callbacks.html
     // Set parent for callback
     this.parent = parent;
-    println("parent " + this.parent);
 
     if (listen) {
       // Verify that parent actaully implements the callback
