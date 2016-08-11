@@ -28,7 +28,7 @@ import netP5.*; //for OSC networking
 import oscP5.*; //for OSC networking
 import hypermedia.net.*; //for UDP networking
 import grafica.*;
-import java.lang.reflect.Method;
+import java.lang.reflect.*; // For callbacks
 
 
 //import java.awt.*;
@@ -86,7 +86,7 @@ OpenBCI_ADS1299 openBCI = new OpenBCI_ADS1299(); //dummy creation to get access 
 String openBCI_portName = "N/A";  //starts as N/A but is selected from control panel to match your OpenBCI USB Dongle's serial/COM
 int openBCI_baud = 115200; //baud rate from the Arduino
 
-OpenBCI_Ganglion ganglion = new OpenBCI_Ganglion(this); //dummy creation to get access to constants, create real one later
+OpenBCI_Ganglion ganglion; //dummy creation to get access to constants, create real one later
 String ganglion_portName = "N/A";
 
 ////// ---- Define variables related to OpenBCI board operations
@@ -242,6 +242,8 @@ void setup() {
   }
   );
 
+  ganglion = new OpenBCI_Ganglion(this);
+
   //set up controlPanelCollapser button
   fontInfo = new PlotFontInfo();
   helpWidget = new HelpWidget(0, win_y - 30, win_x, 30);
@@ -294,6 +296,11 @@ void draw() {
 //====================== END-OF-DRAW ==========================//
 //====================== END-OF-DRAW ==========================//
 //====================== END-OF-DRAW ==========================//
+
+void udpEvent(String msg) {
+  println("GanglionSync: udpEvent");
+  ganglion.parseMessage(msg);
+}
 
 int pointCounter = 0;
 int prevBytes = 0;
@@ -677,11 +684,6 @@ void introAnimation() {
     controlPanel.isOpen = true;
   }
   popStyle();
-}
-
-void udpEvent(String msg) {
-  println("GanglionSync: udpEvent");
-  ganglion.parseMessage(msg);
 }
 
 //CODE FOR FIXING WEIRD EXIT CRASH ISSUE -- 7/27/16 ===========================

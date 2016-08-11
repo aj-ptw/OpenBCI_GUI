@@ -89,22 +89,23 @@ class UDPClass {
     // callback: https://forum.processing.org/one/topic/noob-q-i-d-like-to-learn-more-about-callbacks.html
     // Set parent for callback
     this.parent = parent;
-    println("parent " + parent);
+    println("parent " + this.parent);
 
     if (listen) {
       // Verify that parent actaully implements the callback
       try {
-        this.udpEventMethod = this.parent.getClass().getMethod("udpEvent");
+        // println("Networking: Good job iplmenting udpEvent callback in parent " + parent);
+        this.udpEventMethod = this.parent.getClass().getMethod("udpEvent", new Class[] { String.class });
         this.udp.listen(true);
       }
       catch (Exception e) {
         // No such method declared, there for the parent who created this will not
         //  recieve messages :(
-        println("Networking: UDP will not listen/receive messages");
+        // println("Networking: Error failed to implement udpEvent callback in parent " + this.parent);
         this.udp.listen(false);
       }
     } else {
-      println("Networking: UDP not configured to listen");
+      // println("Networking: UDP not configured to listen");
       this.udp.listen(false);
     }
 

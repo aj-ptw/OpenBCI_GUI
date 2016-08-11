@@ -17,10 +17,6 @@
 //------------------------------------------------------------------------
 
 // println("GanglionSync: parent" + parent);
-void udpEvent(String msg) {
-  println("GanglionSync: udpEvent");
-  ganglion.parseMessage(msg);
-}
 
 class OpenBCI_Ganglion {
   final static String UDP_CMD_CONNECT = "c";
@@ -59,6 +55,7 @@ class OpenBCI_Ganglion {
   public int numberOfDevices = 0;
 
   //constructors
+  OpenBCI_Ganglion() {};  //only use this if you simply want access to some of the constants
   OpenBCI_Ganglion(PApplet applet) {
 
     // Initialize UDP ports
