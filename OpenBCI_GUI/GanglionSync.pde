@@ -10,18 +10,19 @@
 //
 /////////////////////////////////////////////////////////////////////////////
 
-import java.io.OutputStream; //for logging raw bytes to an output file
+// import java.io.OutputStream; //for logging raw bytes to an output file
 
 void udpEvent(String msg) {
-
+  ganglion.parseMessage(msg);
 }
 
 class OpenBCI_Ganglion {
-  final static byte UDP_CMD_CONNECT = "c";
-  final static byte UDP_CMD_COMMAND = "k";
-  final static byte UDP_CMD_DISCONNECT = "d";
-  final static byte UDP_CMD_ERROR = "e";
-  final static byte UDP_CMD_SCAN = "s";
+  final static String UDP_CMD_CONNECT = "c";
+  final static String UDP_CMD_COMMAND = "k";
+  final static String UDP_CMD_DISCONNECT = "d";
+  final static String UDP_CMD_ERROR = "e";
+  final static String UDP_CMD_SCAN = "s";
+  final static String UDP_CMD_STATUS = "q";
 
   final static byte BYTE_START = (byte)0xA0;
   final static byte BYTE_END = (byte)0xC0;
@@ -39,41 +40,38 @@ class OpenBCI_Ganglion {
 
   private int nEEGValuesPerPacket = 4; //defined by the data format sent by openBCI boards
 
-  private int udpGanglionPort = 10996;
+  private int udpGanglionPortRx = 10997;
+  private int udpGanglionPortTx = 10996;
   private String udpGanglionIP = "localhost";
 
   //here is the serial port for this OpenBCI board
-  private UDPClass udp = null;
+  private UDPClass udpRx = null;
+  private UDPClass udpTx = null;
   private boolean portIsOpen = false;
 
+  public String[] deviceList;
+  public int numberOfDevices = 0;
+
   //constructors
-  OpenBCI_Ganglion() {};  //only use this if you simply want access to some of the constants
-  OpenBCI_Ganglion(PApplet applet, String uuid) {
-    printGanglion("starting");
+  OpenBCI_Ganglion(PApplet applet) {
 
-    upd = new UDPClass(applet, udpGanglionPort, udpGanglionIP);
+    // Initialize UDP ports
+    udpRx = new UDPClass(applet, udpGanglionPortRx, udpGanglionIP);
+    udpTx = new UDPClass(applet, udpGanglionPortTx, udpGanglionIP);
 
-    hardwareSyncStep = 0;
-    changeState(STATE_COMINIT);
-    syncWithHardware();
   }
 
-  public void syncWithHardware(){
-    switch (hardwareSyncStep) {
-      case 1:
-        println("OpenBCI_Ganglion: syncWithHardware: [1] Sending channel count (" + nchan + ") to OpenBCI...");
-        break;
-      case 5:
+  public void parseMessage(String msg) {
+    println("OpenBCI_Ganglion: parseMessage: " + msg);
+  }
 
-        println("OpenBCI_Ganglion: syncWithHardware: [5] Writing selected SD setting (" + sdSettingString + ") to OpenBCI...");
-        break;
-      case 6:
-        output("OpenBCI_Ganglion: syncWithHardware: The GUI is done intializing. Click outside of the control panel to interact with the GUI.");
-        changeState(STATE_STOPPED);
-        systemMode = 10;
-        //renitialize GUI if nchan has been updated... needs to be built
-        break;
-    }
+  public void getBLEDevices() {
+    deviceList = null;
+    udpTx.send(UDP_CMD_SCAN);
+  }
+
+  public void connectBLE(String id) {
+    udpTx.send(UDP_CMD_CONNECT + "," + id);
   }
 
   public void updateSyncState() {
@@ -84,40 +82,18 @@ class OpenBCI_Ganglion {
       println("OpenBCI_Ganglion: Sending reset command");
       // serial_openBCI.write('v');
     }
-
-    //if we are in SYNC WITH HARDWARE state ... trigger a command
-    // if ( (state == STATE_SYNCWITHHARDWARE) && (currentlySyncing == false) ) {
-    //   if(millis() - timeOfLastCommand > 200 && readyToSend == true){
-    //     timeOfLastCommand = millis();
-    //     hardwareSyncStep++;
-    //     syncWithHardware(sdSetting);
-    //   }
-    // }
   }
 
   void startDataTransfer(){
-    if (udp != null) {
-      changeState(STATE_NORMAL);  // make sure it's now interpretting as binary
-      println("OpenBCI_Ganglion: startDataTransfer(): writing \'" + command_startBinary + "\' to the serial port...");
-      serial_openBCI.write(command_startBinary);
-    }
+    changeState(STATE_NORMAL);  // make sure it's now interpretting as binary
+    println("OpenBCI_Ganglion: startDataTransfer(): sending \'" + command_startBinary);
+    udpTx.send(UDP_CMD_COMMAND + "," + command_startBinary);
   }
 
   public void stopDataTransfer() {
-    if (serial_openBCI != null) {
-      serial_openBCI.clear(); // clear anything in the com port's buffer
-      openBCI.changeState(STATE_STOPPED);  // make sure it's now interpretting as binary
-      println("OpenBCI_Ganglion: startDataTransfer(): writing \'" + command_stop + "\' to the serial port...");
-      serial_openBCI.write(command_stop);// + "\n");
-    }
-  }
-
-  public boolean isSerialPortOpen() {
-    if (portIsOpen & (serial_openBCI != null)) {
-      return true;
-    } else {
-      return false;
-    }
+    changeState(STATE_STOPPED);  // make sure it's now interpretting as binary
+    println("OpenBCI_Ganglion: stopDataTransfer(): sending \'" + command_stop);
+    udpTx.send(UDP_CMD_COMMAND + "," + command_stop);
   }
 
   private void printGanglion(String msg) {

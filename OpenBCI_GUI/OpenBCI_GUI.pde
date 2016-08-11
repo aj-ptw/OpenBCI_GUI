@@ -28,6 +28,7 @@ import netP5.*; //for OSC networking
 import oscP5.*; //for OSC networking
 import hypermedia.net.*; //for UDP networking
 import grafica.*;
+import java.lang.reflect.Method;
 
 
 //import java.awt.*;
@@ -85,8 +86,8 @@ OpenBCI_ADS1299 openBCI = new OpenBCI_ADS1299(); //dummy creation to get access 
 String openBCI_portName = "N/A";  //starts as N/A but is selected from control panel to match your OpenBCI USB Dongle's serial/COM
 int openBCI_baud = 115200; //baud rate from the Arduino
 
-OpenBCI_Ganglion ganglion = new OpenBCI_Ganglion(); //dummy creation to get access to constants, create real one later
-
+OpenBCI_Ganglion ganglion = new OpenBCI_Ganglion(this); //dummy creation to get access to constants, create real one later
+String ganglion_portName = "N/A";
 
 ////// ---- Define variables related to OpenBCI board operations
 //Define number of channels from openBCI...first EEG channels, then aux channels
@@ -373,7 +374,7 @@ void initSystem() {
     playbackData_table.removeColumn(0);
     break;
   case DATASOURCE_GANGLION:
-    ganglion = new OpenBCI_Ganglion(this, "taco"); //this also starts the data transfer after XX seconds
+    ganglion.connectBLE(ganglion_portName);
     break;
   default:
   }
@@ -702,7 +703,7 @@ void mouseOutOfBounds() {
       MouseInfo.getPointerInfo().getLocation().y >= appletOriginY+height) {
       mouseX = 0;
       mouseY = 0;
-      println("Mouse out of bounds!");
+      // println("Mouse out of bounds!");
       mouseInFrame = false;
     }
   } else {
@@ -712,7 +713,7 @@ void mouseOutOfBounds() {
       appletOriginY = (int)loc.y;
       windowOriginSet = true;
       mouseInFrame = true;
-      println("WINDOW ORIGIN SET!");
+      // println("WINDOW ORIGIN SET!");
     }
   }
 }

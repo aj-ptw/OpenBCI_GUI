@@ -12,6 +12,7 @@
 //      the data stream in those networks.
 //
 //////////////////////////////////////////////////////////////////////////
+
 float[] data_to_send;
 float[] aux_to_send;
 float[] full_message;
