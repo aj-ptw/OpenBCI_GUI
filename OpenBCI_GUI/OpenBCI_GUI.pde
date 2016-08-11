@@ -298,7 +298,7 @@ void draw() {
 //====================== END-OF-DRAW ==========================//
 
 void udpEvent(String msg) {
-  println("GanglionSync: udpEvent");
+  println("GanglionSync: udpEvent " + msg);
   ganglion.parseMessage(msg);
 }
 

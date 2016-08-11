@@ -540,11 +540,6 @@ class ControlPanel {
           refreshPort.wasPressed = true;
         }
 
-        if (refreshBLE.isMouseHere()) {
-          refreshBLE.setIsActive(true);
-          refreshBLE.wasPressed = true;
-        }
-
         if (autoFileName.isMouseHere()) {
           autoFileName.setIsActive(true);
           autoFileName.wasPressed = true;
@@ -637,7 +632,13 @@ class ControlPanel {
 
       if (eegDataSource == DATASOURCE_GANGLION) {
         // This is where we check for button presses if we are searching for BLE devices
-        println("yup");
+
+        if (refreshBLE.isMouseHere()) {
+          refreshBLE.setIsActive(true);
+          refreshBLE.wasPressed = true;
+        }
+
+        ganglion.getBLEDevices();
       }
     }
     // output("Text File Name: " + cp5.get(Textfield.class,"fileName").getText());

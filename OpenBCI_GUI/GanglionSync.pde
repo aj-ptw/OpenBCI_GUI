@@ -47,8 +47,8 @@ class OpenBCI_Ganglion {
   private String udpGanglionIP = "localhost";
 
   //here is the serial port for this OpenBCI board
-  private UDPClass udpRx = null;
-  private UDPClass udpTx = null;
+  public UDPReceive udpRx = null;
+  private UDPSend udpTx = null;
   private boolean portIsOpen = false;
 
   public String[] deviceList = new String[0];
@@ -59,8 +59,8 @@ class OpenBCI_Ganglion {
   OpenBCI_Ganglion(PApplet applet) {
 
     // Initialize UDP ports
-    udpRx = new UDPClass(applet, udpGanglionPortRx, udpGanglionIP, true);
-    udpTx = new UDPClass(applet, udpGanglionPortTx, udpGanglionIP, false);
+    udpRx = new UDPReceive(applet, udpGanglionPortRx, udpGanglionIP);
+    udpTx = new UDPSend(udpGanglionPortTx, udpGanglionIP);
 
   }
 

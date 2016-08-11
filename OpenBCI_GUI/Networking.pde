@@ -58,9 +58,39 @@ private float[] compressArray(DataPacket_ADS1299 data){
 //////////////
 // CLASSES //
 
-class UDPClass {
-  Method udpEventMethod;
-  PApplet parent;
+/**
+ * To perform any action on datagram reception, you need to implement this
+ * handler in your code. This method will be automatically called by the UDP
+ * object each time he receive a nonnull message. This method will send the
+ * message to `udpEvent`
+ */
+void receive(byte[] data, String ip, int port) {	// <-- extended handler
+  // get the "real" message =
+  // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
+  data = subset(data, 0, data.length-2);
+  String message = new String( data );
+
+  // print the result
+  // println( "receive: \""+message+"\" from "+ip+" on port "+port );
+
+  println("Calling " + ganglion.udpRx.udpEventMethod);
+
+  // Be safe, always check to make sure the parent did implement this function
+  if (ganglion.udpRx.udpEventMethod != null) {
+    try {
+      ganglion.udpRx.udpEventMethod.invoke(ganglion.udpRx.parent, message);
+    }
+    catch (Exception e) {
+      System.err.println("Disabling udpEvent() for because of an error.");
+      e.printStackTrace();
+      ganglion.udpRx.udpEventMethod = null;
+    }
+  }
+}
+
+class UDPReceive {
+  public Method udpEventMethod;
+  public PApplet parent;
   int port;
   String ip;
   boolean listen;
@@ -75,77 +105,31 @@ class UDPClass {
    *  to keep the port on this computer.
    * @constructor
    */
-  public UDPClass(PApplet parent, int port, String ip, boolean listen) {
+  public UDPReceive(PApplet parent, int port, String ip) {
     // Grab vars
     this.port  = port;
     this.ip = ip;
-    this.listen = listen;
 
-    this.udp = new UDP(this, port);
+    this.udp = new UDP(parent, port);
+    println("udp bound to " + port);
     this.udp.setBuffer(1024);
     this.udp.log(true);
-
+    this.udp.listen(true);
 
     // callback: https://forum.processing.org/one/topic/noob-q-i-d-like-to-learn-more-about-callbacks.html
     // Set parent for callback
     this.parent = parent;
 
-    if (listen) {
-      // Verify that parent actaully implements the callback
-      try {
-        // println("Networking: Good job iplmenting udpEvent callback in parent " + parent);
-        this.udpEventMethod = this.parent.getClass().getMethod("udpEvent", new Class[] { String.class });
-        this.udp.listen(true);
-      }
-      catch (Exception e) {
-        // No such method declared, there for the parent who created this will not
-        //  recieve messages :(
-        // println("Networking: Error failed to implement udpEvent callback in parent " + this.parent);
-        this.udp.listen(false);
-      }
-    } else {
-      // println("Networking: UDP not configured to listen");
-      this.udp.listen(false);
+    // Verify that parent actaully implements the callback
+    try {
+      this.udpEventMethod = this.parent.getClass().getMethod("udpEvent", new Class[] { String.class });
+      println("Networking: Good job iplmenting udpEvent callback in parent " + parent);
     }
-
-  }
-
-
-  public void send(String message) {
-    // formats the message for Pd
-    message = message+";\n";
-    // send the message
-    this.udp.send( message, ip, port );
-  }
-
-
-  /**
-   * To perform any action on datagram reception, you need to implement this
-   * handler in your code. This method will be automatically called by the UDP
-   * object each time he receive a nonnull message. This method will send the
-   * message to `udpEvent`
-   */
-  void receive(byte[] data, String ip, int port) {	// <-- extended handler
-    // get the "real" message =
-    // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
-    data = subset(data, 0, data.length-2);
-    String message = new String( data );
-
-    // print the result
-    // println( "receive: \""+message+"\" from "+ip+" on port "+port );
-
-    println("Calling " + this.udpEventMethod);
-
-    // Be safe, always check to make sure the parent did implement this function
-    if (this.udpEventMethod != null) {
-      try {
-        this.udpEventMethod.invoke(this.parent, message);
-      }
-      catch (Exception e) {
-        System.err.println("Disabling udpEvent() for because of an error.");
-        e.printStackTrace();
-        this.udpEventMethod = null;
-      }
+    catch (Exception e) {
+      // No such method declared, there for the parent who created this will not
+      //  recieve messages :(
+      println("Networking: Error failed to implement udpEvent callback in parent " + this.parent);
+      this.udp.listen(false);
     }
 
   }
@@ -167,6 +151,10 @@ class UDPSend {
   void send_message(float[] _message){
     String message = Arrays.toString(_message);
     udp.send(message,ip,port);
+  }
+
+  void send(String msg){
+    udp.send(msg,ip,port);
   }
 }
 
