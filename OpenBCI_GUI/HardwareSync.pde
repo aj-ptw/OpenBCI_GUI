@@ -145,9 +145,16 @@ void serialEvent(Serial port) {
 void startRunning() {
   verbosePrint("startRunning...");
   output("Data stream started.");
-  if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
-    if (openBCI != null) openBCI.startDataTransfer();
+  if (eegDataSource == DATASOURCE_GANGLION) {
+    if (ganglion != null) {
+      ganglion.startDataTransfer();
+    }
+  } else {
+    if (openBCI != null) {
+      openBCI.startDataTransfer();
+    }
   }
+
   isRunning = true;
 }
 

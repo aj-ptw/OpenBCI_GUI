@@ -79,7 +79,13 @@ class OpenBCI_Ganglion {
     int index = 0;
     switch (list[0].charAt(0)) {
       case 'c': // Connect
-
+        if (isSuccessCode(Integer.parseInt(list[1]))) {
+          println("OpenBCI_Ganglion: parseMessage: connect: success!");
+          systemMode = 10;
+        } else {
+          println("OpenBCI_Ganglion: parseMessage: connect: failure :(");
+          output("Unable to connect to ganglion!");
+        }
         return false;
       case 't': // Data
         println("OpenBCI_Ganglion: parseMessage: data: " + list[1]);
@@ -99,6 +105,10 @@ class OpenBCI_Ganglion {
         println("OpenBCI_Ganglion: parseMessage: default: " + msg);
         return false;
     }
+  }
+
+  public boolean isSuccessCode(int c) {
+    return c == RESP_SUCCESS;
   }
 
   public void getBLEDevices() {
