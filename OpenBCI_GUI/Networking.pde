@@ -73,7 +73,7 @@ void receive(byte[] data, String ip, int port) {	// <-- extended handler
   // print the result
   // println( "receive: \""+message+"\" from "+ip+" on port "+port );
 
-  println("Calling " + ganglion.udpRx.udpEventMethod);
+  // println("Calling " + ganglion.udpRx.udpEventMethod);
 
   // Be safe, always check to make sure the parent did implement this function
   if (ganglion.udpRx.udpEventMethod != null) {

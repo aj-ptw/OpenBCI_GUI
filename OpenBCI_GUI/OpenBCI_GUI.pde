@@ -299,7 +299,11 @@ void draw() {
 
 void udpEvent(String msg) {
   println("GanglionSync: udpEvent " + msg);
-  ganglion.parseMessage(msg);
+  if (ganglion.parseMessage(msg)) {
+    // Refresh the BLE list
+    controlPanel.bleBox.refreshBLEList();
+  }
+
 }
 
 int pointCounter = 0;
@@ -316,7 +320,7 @@ void initSystem() {
 
   //prepare data variables
   verbosePrint("OpenBCI_GUI: initSystem: Preparing data variables...");
-  dataBuffX = new float[(int)(dataBuff_len_sec * openBCI.get_fs_Hz())];
+  dataBuffX = new float[(int)(dataBuff_len_sec * get_fs_Hz_safe())];
   dataBuffY_uV = new float[nchan][dataBuffX.length];
   dataBuffY_filtY_uV = new float[nchan][dataBuffX.length];
   //data_std_uV = new float[nchan];
@@ -328,24 +332,24 @@ void initSystem() {
     // dataPacketBuff[i] = new DataPacket_ADS1299(OpenBCI_Nchannels+n_aux_ifEnabled);
     dataPacketBuff[i] = new DataPacket_ADS1299(nchan, n_aux_ifEnabled);
   }
-  dataProcessing = new DataProcessing(nchan, openBCI.get_fs_Hz());
-  dataProcessing_user = new DataProcessing_User(nchan, openBCI.get_fs_Hz());
+  dataProcessing = new DataProcessing(nchan, get_fs_Hz_safe());
+  dataProcessing_user = new DataProcessing_User(nchan, get_fs_Hz_safe());
 
 
 
 
   //initialize the data
-  prepareData(dataBuffX, dataBuffY_uV, openBCI.get_fs_Hz());
+  prepareData(dataBuffX, dataBuffY_uV, get_fs_Hz_safe());
 
   verbosePrint("OpenBCI_GUI: initSystem: -- Init 1 --");
 
   //initialize the FFT objects
   for (int Ichan=0; Ichan < nchan; Ichan++) {
     verbosePrint("a--"+Ichan);
-    fftBuff[Ichan] = new FFT(Nfft, openBCI.get_fs_Hz());
+    fftBuff[Ichan] = new FFT(Nfft, get_fs_Hz_safe());
   }  //make the FFT objects
   verbosePrint("OpenBCI_GUI: initSystem: b");
-  initializeFFTObjects(fftBuff, dataBuffY_uV, Nfft, openBCI.get_fs_Hz());
+  initializeFFTObjects(fftBuff, dataBuffY_uV, Nfft, get_fs_Hz_safe());
 
   //prepare some signal processing stuff
   //for (int Ichan=0; Ichan < nchan; Ichan++) { detData_freqDomain[Ichan] = new DetectionData_FreqDomain(); }
@@ -355,7 +359,6 @@ void initSystem() {
   //prepare the source of the input data
   switch (eegDataSource) {
   case DATASOURCE_NORMAL_W_AUX:
-
     // int nDataValuesPerPacket = OpenBCI_Nchannels;
     int nEEDataValuesPerPacket = nchan;
     boolean useAux = false;
@@ -408,6 +411,18 @@ void initSystem() {
   //sync GUI default settings with OpenBCI's default settings...
   // openBCI.syncWithHardware(); //this starts the sequence off ... read in OpenBCI_ADS1299 iterates through the rest based on the ASCII trigger "$$$"
   // verbosePrint("OpenBCI_GUI: initSystem: -- Init 5 [COMPLETE] --");
+}
+
+/**
+ * @description Useful function to get the correct sample rate based on data source
+ * @returns `float` - The frequency / sample rate of the data source
+ */
+float get_fs_Hz_safe() {
+  if (eegDataSource == DATASOURCE_GANGLION) {
+    return ganglion.get_fs_Hz();
+  } else {
+    return openBCI.get_fs_Hz();
+  }
 }
 
 //halt the data collection

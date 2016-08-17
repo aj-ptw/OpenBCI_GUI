@@ -58,7 +58,6 @@ MenuList serialList;
 String[] serialPorts = new String[Serial.list().length];
 
 MenuList bleList;
-String[] bleDevices = new String[0];
 
 MenuList sdTimes;
 
@@ -282,7 +281,7 @@ class ControlPanel {
 
     initBox = new InitBox(x, (dataSourceBox.y + dataSourceBox.h), w, h, globalPadding);
 
-    // Ganglion shi*
+    // Ganglion
     bleBox = new BLEBox(x + w, dataSourceBox.y, w, h, globalPadding);
 
   }
@@ -363,9 +362,7 @@ class ControlPanel {
         sdBox.draw();
         networkingBoxLive.draw();
         if(rcBox.isShowing){
-
           rcBox.draw();
-
           if(channelPopup.wasClicked()){
             channelPopup.draw();
             cp5Popup.get(MenuList.class, "channelList").setVisible(true);
@@ -382,10 +379,10 @@ class ControlPanel {
             cp5.get(MenuList.class, "serialList").setVisible(true); //make sure the serialList menulist is visible
             cp5.get(MenuList.class, "sdTimes").setVisible(true); //make sure the SD time record options menulist is visible
           }
-
         }
         cp5.get(Textfield.class, "fileName").setVisible(true); //make sure the data file field is visible
         cp5.get(MenuList.class, "serialList").setVisible(true); //make sure the serialList menulist is visible
+        cp5.get(MenuList.class, "bleList").setVisible(false); //make sure the serialList menulist is visible
         cp5.get(MenuList.class, "sdTimes").setVisible(true); //make sure the SD time record options menulist is visible
         cp5.get(MenuList.class, "networkList").setVisible(true); //make sure the SD time record options menulist is visible
         if (networkType == -1){
@@ -396,7 +393,7 @@ class ControlPanel {
           cp5.get(Textfield.class, "osc_address").setVisible(false); //make sure the SD time record options menulist is visible
           cp5.get(Textfield.class, "lsl_data").setVisible(false); //make sure the SD time record options menulist is visible
           cp5.get(Textfield.class, "lsl_aux").setVisible(false); //make sure the SD time record options menulist is visible
-        }else if (networkType == 0){
+        } else if (networkType == 0){
           cp5.get(Textfield.class, "udp_ip").setVisible(false); //make sure the SD time record options menulist is visible
           cp5.get(Textfield.class, "udp_port").setVisible(false); //make sure the SD time record options menulist is visible
           cp5.get(Textfield.class, "osc_ip").setVisible(false); //make sure the SD time record options menulist is visible
@@ -456,41 +453,18 @@ class ControlPanel {
         cp5Popup.get(MenuList.class, "channelList").setVisible(false);
         cp5Popup.get(MenuList.class, "pollList").setVisible(false);
       } else if (eegDataSource == 2) {
-        //make sure serial list is visible
         //set other CP5 controllers invisible
-        cp5.get(Textfield.class, "fileName").setVisible(false); //make sure the data file field is visible
-        cp5.get(MenuList.class, "serialList").setVisible(false);
-        cp5.get(MenuList.class, "sdTimes").setVisible(false);
-        cp5.get(MenuList.class, "networkList").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "udp_ip").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "udp_port").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_ip").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_port").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_address").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "lsl_data").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "lsl_aux").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5Popup.get(MenuList.class, "channelList").setVisible(false);
-        cp5Popup.get(MenuList.class, "pollList").setVisible(false);
+        hideAllBoxes();
+      } else if (eegDataSource == DATASOURCE_GANGLION) {
+        hideAllBoxes();
+
+        bleBox.draw();
+        cp5.get(MenuList.class, "bleList").setVisible(true); //make sure the bleList menulist is visible
+
       } else {
         //set other CP5 controllers invisible
-        cp5.get(Textfield.class, "fileName").setVisible(false); //make sure the data file field is visible
-        cp5.get(MenuList.class, "serialList").setVisible(false);
-        cp5.get(MenuList.class, "sdTimes").setVisible(false);
-        cp5.get(MenuList.class, "networkList").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "udp_ip").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "udp_port").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_ip").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_port").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_address").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "lsl_data").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "lsl_aux").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5Popup.get(MenuList.class, "channelList").setVisible(false);
-        cp5Popup.get(MenuList.class, "pollList").setVisible(false);
+        hideAllBoxes();
       }
-    } else if (eegDataSource == DATASOURCE_GANGLION) {
-      bleBox.draw();
-      cp5.get(MenuList.class, "bleList").setVisible(true); //make sure the bleList menulist is visible
-
     } else {
       cp5.setVisible(false); // if isRunning is true, hide all controlP5 elements
       cp5Popup.setVisible(false);
@@ -511,6 +485,24 @@ class ControlPanel {
       text(stopInstructions, x + globalPadding*2, y + globalPadding*4, w - globalPadding*4, dataSourceBox.h - globalPadding*4);
       popStyle();
     }
+  }
+
+  public void hideAllBoxes() {
+    //set other CP5 controllers invisible
+    cp5.get(Textfield.class, "fileName").setVisible(false); //make sure the data file field is visible
+    cp5.get(MenuList.class, "serialList").setVisible(false);
+    cp5.get(MenuList.class, "bleList").setVisible(false);
+    cp5.get(MenuList.class, "sdTimes").setVisible(false);
+    cp5.get(MenuList.class, "networkList").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "udp_ip").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "udp_port").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "osc_ip").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "osc_port").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "osc_address").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "lsl_data").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "lsl_aux").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5Popup.get(MenuList.class, "channelList").setVisible(false);
+    cp5Popup.get(MenuList.class, "pollList").setVisible(false);
   }
 
   //mouse pressed in control panel
@@ -637,7 +629,6 @@ class ControlPanel {
           refreshBLE.setIsActive(true);
           refreshBLE.wasPressed = true;
         }
-
         ganglion.getBLEDevices();
       }
     }
@@ -855,18 +846,8 @@ public void system_init(){
         initSystemButton.wasPressed = false;
         initSystemButton.setIsActive(false);
         return;
-      } else if (eegDataSource == DATASOURCE_GANGLION) {
-        if (ganglion_portName == "N/A") {
-          output("No BLE device selected. Please select your Ganglion device and retry system initiation.");
-        } else {
-          output("Trying to connect to ganglion device with id " + ganglion_portName); // tell user that they need to select a file before the system can be started
-          // Reconfigure arrays and stuff for ganglion!
-          nchan = 4;
-          fftBuff = new FFT[nchan];  //reinitialize the FFT buffer
-          yLittleBuff_uV = new float[nchan][nPointsPerUpdate];
-          println("channel count set to " + str(nchan));
-          updateChannelArrays(nchan); //make sure to reinitialize the channel arrays with the right number of channels
-        }
+      } else if (eegDataSource == DATASOURCE_GANGLION && ganglion_portName == "N/A") {
+        output("No BLE device selected. Please select your Ganglion device and retry system initiation.");
         initSystemButton.wasPressed = false;
         initSystemButton.setIsActive(false);
         return;
@@ -880,9 +861,16 @@ public void system_init(){
         initSystemButton.setString("STOP SYSTEM");
         //global steps to START SYSTEM
         // prepare the serial port
-        verbosePrint("ControlPanel — port is open: " + openBCI.isSerialPortOpen());
-        if (openBCI.isSerialPortOpen() == true) {
-          openBCI.closeSerialPort();
+        if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
+          verbosePrint("ControlPanel — port is open: " + openBCI.isSerialPortOpen());
+          if (openBCI.isSerialPortOpen() == true) {
+            openBCI.closeSerialPort();
+          }
+        } else { // Must be Ganglion
+          verbosePrint("ControlPanel — port is open: " + ganglion.isPortOpen());
+          if (ganglion.isPortOpen()) {
+            ganglion.disconnectBLE();
+          }
         }
 
         if (networkType == 1){
@@ -1035,33 +1023,21 @@ class BLEBox {
     x = _x;
     y = _y;
     w = _w;
-    h = 171 + _padding;
+    h = 171 - 24 + _padding;
     padding = _padding;
 
-    refreshBLE = new Button (x + padding, y + padding*4 + 13 + 71 + 24, w - padding*2, 24, "REFRESH LIST", fontInfo.buttonLabel_size);
-    popOut = new Button(x+padding + (w-padding*4), y +5, 20,20,">",fontInfo.buttonLabel_size);
-
-    bleList = new MenuList(cp5, "bleList", w - padding*2, 72, f2);
+    refreshBLE = new Button (x + padding, y + padding * 4 + 13 + 71, w - padding * 2, 24, "REFRESH LIST", fontInfo.buttonLabel_size);
+    bleList = new MenuList(cp5, "bleList", w - padding * 2, 84, f2);
     // println(w-padding*2);
-    bleList.setPosition(x + padding, y + padding*3 + 13 + 24);
+    bleList.setPosition(x + padding, y + padding * 3);
     // Call to update the list
-    ganglion.getBLEDevices();
+    // ganglion.getBLEDevices();
 
   }
 
   public void update() {
     // Quick check to see if there are just more or less devices in general
-    // println("length " + ganglion);
-    // if (bleDevices.length != ganglion.deviceList.length) {
-    //   refreshBLEList();
-    // } else {
-    //   for (int i = 0; i < ganglion.deviceList.length; i++) {
-    //     if (ganglion.deviceList[i] != bleDevices[i]) {
-    //       refreshBLEList();
-    //       break;
-    //     }
-    //   }
-    // }
+
   }
 
   public void draw() {
@@ -1077,14 +1053,12 @@ class BLEBox {
     popStyle();
 
     refreshBLE.draw();
-    popOut.draw();
   }
 
   public void refreshBLEList() {
-    bleDevices = new String[ganglion.deviceList.length];
     bleList.items.clear();
-    for (int i = 0; i < bleDevices.length; i++) {
-      String tempPort = bleDevices[(bleDevices.length-1) - i]; //list backwards... because usually our port is at the bottom
+    for (int i = 0; i < ganglion.deviceList.length; i++) {
+      String tempPort = ganglion.deviceList[i];
       bleList.addItem(makeItem(tempPort));
     }
     bleList.updateMenu();
