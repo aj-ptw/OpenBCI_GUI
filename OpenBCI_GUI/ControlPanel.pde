@@ -867,7 +867,13 @@ public void system_init(){
             openBCI.closeSerialPort();
           }
         } else { // Must be Ganglion
-          verbosePrint("ControlPanel — port is open: " + ganglion.isPortOpen());
+          nchan = 4;
+          fftBuff = new FFT[nchan];  //reinitialize the FFT buffer
+          yLittleBuff_uV = new float[nchan][nPointsPerUpdate];
+          output("channel count set to " + str(nchan));
+          updateChannelArrays(nchan); //make sure to reinitialize the channel arrays with the right number of channels
+
+          println("ControlPanel — port is open: " + ganglion.isPortOpen());
           if (ganglion.isPortOpen()) {
             ganglion.disconnectBLE();
           }

@@ -40,16 +40,28 @@ class OpenBCI_Ganglion {
 
   final static int RESP_SUCCESS = 200;
   final static int RESP_ERROR_BAD_PACKET = 500;
-  private final float fs_Hz = 256.0f;  //sample rate used by OpenBCI Ganglion board... set by its Arduino code
 
   private int state = STATE_NOCOM;
   int prevState_millis = 0; // Used for calculating connect time out
 
-  private int nEEGValuesPerPacket = 4; //defined by the data format sent by openBCI boards
+  private int nEEGValuesPerPacket = 4; // Defined by the data format sent by openBCI boards
+  private int nAuxValuesPerPacket = 0; // Defined by the arduino code
 
   private int udpGanglionPortRx = 10997;
   private int udpGanglionPortTx = 10996;
   private String udpGanglionIP = "localhost";
+
+  private final float fs_Hz = 256.0f;  //sample rate used by OpenBCI Ganglion board... set by its Arduino code
+  private final float MCP3912_Vref = 1.2f;  // reference voltage for ADC in MCP3912 set in hardware
+  private float MCP3912_gain = 1.0;  //assumed gain setting for MCP3912.  NEEDS TO BE ADJUSTABLE JM
+  private float scale_fac_uVolts_per_count = (MCP3912_Vref * 1000000.f) / (8388607.0 * MCP3912_gain * 1.5 * 51.0); //MCP3912 datasheet page 34. Gain of InAmp = 80
+  // private final float scale_fac_accel_G_per_count = 0.002 / ((float)pow(2,4));  //assume set to +/4G, so 2 mG per digit (datasheet). Account for 4 bits unused
+  // private final float leadOffDrive_amps = 6.0e-9;  //6 nA, set by its Arduino code
+
+  private int bleErrorCounter = 0;
+  private int prevSampleIndex = 0;
+
+  private DataPacket_ADS1299 dataPacket;
 
   //here is the serial port for this OpenBCI board
   public UDPReceive udpRx = null;
@@ -62,6 +74,7 @@ class OpenBCI_Ganglion {
   // Getters
   public float get_fs_Hz() { return fs_Hz; }
   public boolean isPortOpen() { return portIsOpen; }
+  public float get_scale_fac_uVolts_per_count() { return scale_fac_uVolts_per_count; }
 
   //constructors
   OpenBCI_Ganglion() {};  //only use this if you simply want access to some of the constants
@@ -71,6 +84,14 @@ class OpenBCI_Ganglion {
     udpRx = new UDPReceive(applet, udpGanglionPortRx, udpGanglionIP);
     udpTx = new UDPSend(udpGanglionPortTx, udpGanglionIP);
 
+    // For storing data into
+    dataPacket = new DataPacket_ADS1299(nEEGValuesPerPacket,nAuxValuesPerPacket);  //this should always be 8 channels
+    for(int i = 0; i < nEEGValuesPerPacket; i++) {
+      dataPacket.values[i] = 0;
+    }
+    for(int i = 0; i < nAuxValuesPerPacket; i++){
+      dataPacket.auxValues[i] = 0;
+    }
   }
 
   // Return true if the display needs to be updated for the BLE list
@@ -81,6 +102,7 @@ class OpenBCI_Ganglion {
       case 'c': // Connect
         if (isSuccessCode(Integer.parseInt(list[1]))) {
           println("OpenBCI_Ganglion: parseMessage: connect: success!");
+          output("OpenBCI_Ganglion: The GUI is done intializing. Click outside of the control panel to interact with the GUI.");
           systemMode = 10;
         } else {
           println("OpenBCI_Ganglion: parseMessage: connect: failure :(");
@@ -88,7 +110,29 @@ class OpenBCI_Ganglion {
         }
         return false;
       case 't': // Data
-        println("OpenBCI_Ganglion: parseMessage: data: " + list[1]);
+        if (isSuccessCode(Integer.parseInt(list[1]))) {
+          // Sample number stuff
+          dataPacket.sampleIndex = int(Integer.parseInt(list[2]));
+          if ((dataPacket.sampleIndex - prevSampleIndex) != 1) {
+            if(dataPacket.sampleIndex != 0){  // if we rolled over, don't count as error
+              bleErrorCounter++;
+              println("OpenBCI_Ganglion: apparent sampleIndex jump from Serial data: " + prevSampleIndex + " to  " + dataPacket.sampleIndex + ".  Keeping packet. (" + bleErrorCounter + ")");
+            }
+          }
+          prevSampleIndex = dataPacket.sampleIndex;
+
+          // Channel data storage
+          for (int i = 0; i < 4; i++) {
+            dataPacket.values[i] = Integer.parseInt(list[3 + i]);
+          }
+          curDataPacketInd = (curDataPacketInd+1) % dataPacketBuff.length; //this is also used to let the rest of the code that it may be time to do something
+          ganglion.copyDataPacketTo(dataPacketBuff[curDataPacketInd]);  //resets isNewDataPacketAvailable to false
+          newPacketCounter++;
+          println("packet counter " + newPacketCounter);
+        } else {
+          bleErrorCounter++;
+          println("OpenBCI_Ganglion: parseMessage: data: bad");
+        }
         return false;
       case 'e': // Error
         println("OpenBCI_Ganglion: parseMessage: error: " + list[2]);
@@ -105,6 +149,10 @@ class OpenBCI_Ganglion {
         println("OpenBCI_Ganglion: parseMessage: default: " + msg);
         return false;
     }
+  }
+
+  public int copyDataPacketTo(DataPacket_ADS1299 target) {
+    return dataPacket.copyTo(target);
   }
 
   public boolean isSuccessCode(int c) {

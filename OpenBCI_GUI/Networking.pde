@@ -113,7 +113,7 @@ class UDPReceive {
     this.udp = new UDP(parent, port);
     println("udp bound to " + port);
     this.udp.setBuffer(1024);
-    this.udp.log(true);
+    this.udp.log(false);
     this.udp.listen(true);
 
     // callback: https://forum.processing.org/one/topic/noob-q-i-d-like-to-learn-more-about-callbacks.html
