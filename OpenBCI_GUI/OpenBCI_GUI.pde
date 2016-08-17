@@ -298,7 +298,7 @@ void draw() {
 //====================== END-OF-DRAW ==========================//
 
 void udpEvent(String msg) {
-  println("GanglionSync: udpEvent " + msg);
+  // println("GanglionSync: udpEvent " + msg);
   if (ganglion.parseMessage(msg)) {
     // Refresh the BLE list
     controlPanel.bleBox.refreshBLEList();
@@ -339,17 +339,17 @@ void initSystem() {
 
 
   //initialize the data
-  prepareData(dataBuffX, dataBuffY_uV, get_fs_Hz_safe());
+  prepareData(dataBuffX, dataBuffY_uV, openBCI.get_fs_Hz());
 
   verbosePrint("OpenBCI_GUI: initSystem: -- Init 1 --");
 
   //initialize the FFT objects
   for (int Ichan=0; Ichan < nchan; Ichan++) {
     verbosePrint("a--"+Ichan);
-    fftBuff[Ichan] = new FFT(Nfft, get_fs_Hz_safe());
+    fftBuff[Ichan] = new FFT(Nfft, openBCI.get_fs_Hz());
   }  //make the FFT objects
   verbosePrint("OpenBCI_GUI: initSystem: b");
-  initializeFFTObjects(fftBuff, dataBuffY_uV, Nfft, get_fs_Hz_safe());
+  initializeFFTObjects(fftBuff, dataBuffY_uV, Nfft, openBCI.get_fs_Hz());
 
   //prepare some signal processing stuff
   //for (int Ichan=0; Ichan < nchan; Ichan++) { detData_freqDomain[Ichan] = new DetectionData_FreqDomain(); }

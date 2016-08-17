@@ -67,6 +67,7 @@ class OpenBCI_Ganglion {
   public UDPReceive udpRx = null;
   private UDPSend udpTx = null;
   private boolean portIsOpen = false;
+  private boolean connected = false;
 
   public String[] deviceList = new String[0];
   public int numberOfDevices = 0;
@@ -104,9 +105,11 @@ class OpenBCI_Ganglion {
           println("OpenBCI_Ganglion: parseMessage: connect: success!");
           output("OpenBCI_Ganglion: The GUI is done intializing. Click outside of the control panel to interact with the GUI.");
           systemMode = 10;
+          connected = true;
         } else {
           println("OpenBCI_Ganglion: parseMessage: connect: failure :(");
           output("Unable to connect to ganglion!");
+          connected = false;
         }
         return false;
       case 't': // Data
@@ -128,7 +131,6 @@ class OpenBCI_Ganglion {
           curDataPacketInd = (curDataPacketInd+1) % dataPacketBuff.length; //this is also used to let the rest of the code that it may be time to do something
           ganglion.copyDataPacketTo(dataPacketBuff[curDataPacketInd]);  //resets isNewDataPacketAvailable to false
           newPacketCounter++;
-          println("packet counter " + newPacketCounter);
         } else {
           bleErrorCounter++;
           println("OpenBCI_Ganglion: parseMessage: data: bad");
@@ -208,5 +210,22 @@ class OpenBCI_Ganglion {
     state = newState;
     prevState_millis = millis();
     return 0;
+  }
+
+  // Channel setting
+  //activate or deactivate an EEG channel...channel counting is zero through nchan-1
+  public void changeChannelState(int Ichan, boolean activate) {
+    if (connected) {
+      // if ((Ichan >= 0) && (Ichan < command_activate_channel.length)) {
+      if ((Ichan >= 0)) {
+        if (activate) {
+          // serial_openBCI.write(command_activate_channel[Ichan]);
+          gui.cc.powerUpChannel(Ichan);
+        } else {
+          // serial_openBCI.write(command_deactivate_channel[Ichan]);
+          gui.cc.powerDownChannel(Ichan);
+        }
+      }
+    }
   }
 };

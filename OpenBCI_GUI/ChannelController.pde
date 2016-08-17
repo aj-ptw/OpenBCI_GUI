@@ -54,7 +54,8 @@ void activateChannel(int Ichan) {
       openBCI.changeChannelState(Ichan, true); //activate
     }
   } else if (eegDataSource == DATASOURCE_GANGLION) {
-    println("activating channel on ganglion");
+    // println("activating channel on ganglion");
+    ganglion.changeChannelState(Ichan, true);
   }
   if (Ichan < gui.chanButtons.length) {
     channelSettingValues[Ichan][0] = '0';
@@ -69,7 +70,8 @@ void deactivateChannel(int Ichan) {
       openBCI.changeChannelState(Ichan, false); //de-activate
     }
   } else if (eegDataSource == DATASOURCE_GANGLION) {
-    println("deactivating channel on ganglion");
+    // println("deactivating channel on ganglion");
+    ganglion.changeChannelState(Ichan, false);
   }
   if (Ichan < gui.chanButtons.length) {
     channelSettingValues[Ichan][0] = '1';

@@ -461,6 +461,7 @@ class ControlPanel {
         bleBox.draw();
         cp5.get(MenuList.class, "bleList").setVisible(true); //make sure the bleList menulist is visible
 
+
       } else {
         //set other CP5 controllers invisible
         hideAllBoxes();
@@ -516,12 +517,14 @@ class ControlPanel {
 
     //only able to click buttons of control panel when system is not running
     if (systemMode != 10) {
-      if(autoconnect.isMouseHere()){
-        autoconnect.setIsActive(true);
-        autoconnect.wasPressed = true;
-      }
+
       //active buttons during DATASOURCE_NORMAL_W_AUX
       if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
+        if(autoconnect.isMouseHere()){
+          autoconnect.setIsActive(true);
+          autoconnect.wasPressed = true;
+        }
+
         if (popOut.isMouseHere()){
           popOut.setIsActive(true);
           popOut.wasPressed = true;
@@ -629,7 +632,7 @@ class ControlPanel {
           refreshBLE.setIsActive(true);
           refreshBLE.wasPressed = true;
         }
-        ganglion.getBLEDevices();
+
       }
     }
     // output("Text File Name: " + cp5.get(Textfield.class,"fileName").getText());

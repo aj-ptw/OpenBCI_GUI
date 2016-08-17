@@ -77,7 +77,7 @@ class EMG_Widget extends Container{
 
     this.nchan = NCHAN;
     this.fs_Hz = sample_rate_Hz;
-    println("EMG_Widget: constructor: NCHAN " + NCHAN);
+    // println("EMG_Widget: constructor: NCHAN " + NCHAN);
     tripSliders = new TripSlider[NCHAN];
     untripSliders = new TripSlider[NCHAN];
     motorWidgets = new Motor_Widget[NCHAN];
@@ -655,7 +655,7 @@ class EMG_Widget extends Container{
 
   //Mouse Released Event
   void mouseReleased(){
-    println("EMG_Widget: mouseReleased: nchan " + nchan);
+    // println("EMG_Widget: mouseReleased: nchan " + nchan);
     for(int i = 0; i < nchan; i++){
       if(!motorWidget.configWidget.dynamicThreshold.wasPressed && !configButton.wasPressed){
         tripSliders[i].releaseEvent();
@@ -713,7 +713,7 @@ class EMG_Widget extends Container{
     public Config_Widget(int NCHAN, float sample_rate_Hz, Container container, Motor_Widget[] parent){
       super(container, "WHOLE");
 
-      println("EMG_Widget: Config_Widget: nchan " + NCHAN);
+      // println("EMG_Widget: Config_Widget: nchan " + NCHAN);
 
       this.nchan = NCHAN;
       this.fs_Hz = sample_rate_Hz;
