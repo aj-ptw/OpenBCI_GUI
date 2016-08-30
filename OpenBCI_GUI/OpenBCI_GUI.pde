@@ -401,7 +401,7 @@ void initSystem() {
 
   //open data file
   if (eegDataSource == DATASOURCE_NORMAL_W_AUX) openNewLogFile(fileName);  //open a new log file
-  if (eegDataSource == DATASOURCE_GANGLION) println("open ganglion output file");
+  if (eegDataSource == DATASOURCE_GANGLION) openNewLogFile(fileName); // println("open ganglion output file");
 
   nextPlayback_millis = millis(); //used for synthesizeData and readFromFile.  This restarts the clock that keeps the playback at the right pace.
 

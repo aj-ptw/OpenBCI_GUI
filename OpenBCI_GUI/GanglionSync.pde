@@ -24,6 +24,7 @@ class OpenBCI_Ganglion {
   final static String UDP_CMD_DISCONNECT = "d";
   final static String UDP_CMD_DATA= "t";
   final static String UDP_CMD_ERROR = "e";
+  final static String UDP_CMD_LOG = "l";
   final static String UDP_CMD_SCAN = "s";
   final static String UDP_CMD_STATUS = "q";
 
@@ -130,6 +131,7 @@ class OpenBCI_Ganglion {
           }
           curDataPacketInd = (curDataPacketInd+1) % dataPacketBuff.length; //this is also used to let the rest of the code that it may be time to do something
           ganglion.copyDataPacketTo(dataPacketBuff[curDataPacketInd]);  //resets isNewDataPacketAvailable to false
+          fileoutput.writeRawData_dataPacket(dataPacketBuff[curDataPacketInd], ganglion.get_scale_fac_uVolts_per_count(), 0);
           newPacketCounter++;
         } else {
           bleErrorCounter++;
@@ -147,6 +149,9 @@ class OpenBCI_Ganglion {
           index++;
         }
         return true;
+      case 'l':
+        println("OpenBCI_Ganglion: Log: " + list[1]);
+        return false;
       default:
         println("OpenBCI_Ganglion: parseMessage: default: " + msg);
         return false;
