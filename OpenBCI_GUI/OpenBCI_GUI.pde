@@ -27,6 +27,7 @@ import java.awt.event.*; //to allow for event listener on screen resize
 import netP5.*; //for OSC networking
 import oscP5.*; //for OSC networking
 import hypermedia.net.*; //for UDP networking
+import processing.net.*; // For TCP networking
 import grafica.*;
 import java.lang.reflect.*; // For callbacks
 
@@ -297,7 +298,7 @@ void draw() {
 //====================== END-OF-DRAW ==========================//
 //====================== END-OF-DRAW ==========================//
 
-void udpEvent(String msg) {
+void tcpEvent(String msg) {
   // println("GanglionSync: udpEvent " + msg);
   if (ganglion.parseMessage(msg)) {
     // Refresh the BLE list

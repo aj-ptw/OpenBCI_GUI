@@ -64,29 +64,49 @@ private float[] compressArray(DataPacket_ADS1299 data){
  * object each time he receive a nonnull message. This method will send the
  * message to `udpEvent`
  */
-void receive(byte[] data, String ip, int port) {	// <-- extended handler
-  // get the "real" message =
-  // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
-  data = subset(data, 0, data.length-2);
-  String message = new String( data );
+// void receive(byte[] data, String ip, int port) {	// <-- extended handler
+//   // get the "real" message =
+//   // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
+//   data = subset(data, 0, data.length-2);
+//   String message = new String( data );
+//
+//   // Be safe, always check to make sure the parent did implement this function
+//   if (ganglion.udpRx.udpEventMethod != null) {
+//     try {
+//       ganglion.udpRx.udpEventMethod.invoke(ganglion.udpRx.parent, message);
+//     }
+//     catch (Exception e) {
+//       System.err.println("Disabling udpEvent() for because of an error.");
+//       e.printStackTrace();
+//       ganglion.udpRx.udpEventMethod = null;
+//     }
+//   }
+// }
 
-  // print the result
-  // println( "receive: \""+message+"\" from "+ip+" on port "+port );
-
-  // println("Calling " + ganglion.udpRx.udpEventMethod);
-
-  // Be safe, always check to make sure the parent did implement this function
-  if (ganglion.udpRx.udpEventMethod != null) {
-    try {
-      ganglion.udpRx.udpEventMethod.invoke(ganglion.udpRx.parent, message);
-    }
-    catch (Exception e) {
-      System.err.println("Disabling udpEvent() for because of an error.");
-      e.printStackTrace();
-      ganglion.udpRx.udpEventMethod = null;
-    }
-  }
-}
+// void clientEvent(Client someClient) {
+//   print("Server Says:  ");
+//   dataIn = myClient.read();
+//   println(dataIn);
+//   background(dataIn);
+//
+//   // get the "real" message =
+//   // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
+//   data = subset(data, 0, data.length-2);
+//   String message = new String( data );
+//
+//   // Be safe, always check to make sure the parent did implement this function
+//   if (ganglion.udpRx.udpEventMethod != null) {
+//     try {
+//       ganglion.udpRx.udpEventMethod.invoke(ganglion.udpRx.parent, message);
+//     }
+//     catch (Exception e) {
+//       System.err.println("Disabling udpEvent() for because of an error.");
+//       e.printStackTrace();
+//       ganglion.udpRx.udpEventMethod = null;
+//     }
+//   }
+//
+// }
 
 class UDPReceive {
   public Method udpEventMethod;

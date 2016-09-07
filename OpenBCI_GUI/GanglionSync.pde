@@ -1,10 +1,10 @@
 ///////////////////////////////////////////////////////////////////////////////
 //
 // This class configures and manages the connection to the OpenBCI Ganglion.
-// The connection is implemented via a UDP connection to a UDP port.
+// The connection is implemented via a TCP connection to a TCP port.
 // The Gagnlion is configured using single letter text commands sent from the
-// PC to the UDP server.  The EEG data streams back from the Ganglion, to the
-// UDP server and back to the PC continuously (once started).
+// PC to the TCP server.  The EEG data streams back from the Ganglion, to the
+// TCP server and back to the PC continuously (once started).
 //
 // Created: AJ Keller, August 2016
 //
@@ -16,17 +16,57 @@
 //                       Global Functions
 //------------------------------------------------------------------------
 
-// println("GanglionSync: parent" + parent);
+void clientEvent(Client someClient) {
+  // print("Server Says:  ");
+
+  int p = ganglion.tcpBufferPositon;
+  ganglion.tcpBuffer[p] = ganglion.tcpClient.readChar();
+  ganglion.tcpBufferPositon++;
+
+  if(p > 2) {
+    String posMatch  = new String(ganglion.tcpBuffer, p - 2, 3);
+    if (posMatch.equals(ganglion.TCP_STOP)) {
+      // Get a string from the tcp buffer
+      String msg = new String(ganglion.tcpBuffer, 0, p);
+      // Send the new string message to be processed
+      if(ganglion.parseMessage(msg)) {
+        controlPanel.bleBox.refreshBLEList();
+      }
+      // Reset the buffer position
+      ganglion.tcpBufferPositon = 0;
+    }
+  }
+
+  // background(dataIn);
+
+  // // get the "real" message =
+  // // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
+  // data = subset(data, 0, data.length-2);
+  // String message = new String( data );
+  //
+  // // Be safe, always check to make sure the parent did implement this function
+  // if (ganglion.udpRx.udpEventMethod != null) {
+  //   try {
+  //     ganglion.udpRx.udpEventMethod.invoke(ganglion.udpRx.parent, message);
+  //   }
+  //   catch (Exception e) {
+  //     System.err.println("Disabling udpEvent() for because of an error.");
+  //     e.printStackTrace();
+  //     ganglion.udpRx.udpEventMethod = null;
+  //   }
+  // }
+}
 
 class OpenBCI_Ganglion {
-  final static String UDP_CMD_CONNECT = "c";
-  final static String UDP_CMD_COMMAND = "k";
-  final static String UDP_CMD_DISCONNECT = "d";
-  final static String UDP_CMD_DATA= "t";
-  final static String UDP_CMD_ERROR = "e";
-  final static String UDP_CMD_LOG = "l";
-  final static String UDP_CMD_SCAN = "s";
-  final static String UDP_CMD_STATUS = "q";
+  final static String TCP_CMD_CONNECT = "c";
+  final static String TCP_CMD_COMMAND = "k";
+  final static String TCP_CMD_DISCONNECT = "d";
+  final static String TCP_CMD_DATA= "t";
+  final static String TCP_CMD_ERROR = "e";
+  final static String TCP_CMD_LOG = "l";
+  final static String TCP_CMD_SCAN = "s";
+  final static String TCP_CMD_STATUS = "q";
+  final static String TCP_STOP = ",;\n";
 
   final static byte BYTE_START = (byte)0xA0;
   final static byte BYTE_END = (byte)0xC0;
@@ -48,9 +88,8 @@ class OpenBCI_Ganglion {
   private int nEEGValuesPerPacket = 4; // Defined by the data format sent by openBCI boards
   private int nAuxValuesPerPacket = 0; // Defined by the arduino code
 
-  private int udpGanglionPortRx = 10997;
-  private int udpGanglionPortTx = 10996;
-  private String udpGanglionIP = "localhost";
+  private int tcpGanglionPort = 10996;
+  private String tcpGanglionIP = "127.0.0.1";
 
   private final float fs_Hz = 256.0f;  //sample rate used by OpenBCI Ganglion board... set by its Arduino code
   private final float MCP3912_Vref = 1.2f;  // reference voltage for ADC in MCP3912 set in hardware
@@ -64,14 +103,15 @@ class OpenBCI_Ganglion {
 
   private DataPacket_ADS1299 dataPacket;
 
-  //here is the serial port for this OpenBCI board
-  public UDPReceive udpRx = null;
-  private UDPSend udpTx = null;
+  public Client tcpClient;
   private boolean portIsOpen = false;
   private boolean connected = false;
 
   public String[] deviceList = new String[0];
   public int numberOfDevices = 0;
+
+  public char[] tcpBuffer = new char[1024];
+  public int tcpBufferPositon = 0;
 
   // Getters
   public float get_fs_Hz() { return fs_Hz; }
@@ -82,12 +122,11 @@ class OpenBCI_Ganglion {
   OpenBCI_Ganglion() {};  //only use this if you simply want access to some of the constants
   OpenBCI_Ganglion(PApplet applet) {
 
-    // Initialize UDP ports
-    udpRx = new UDPReceive(applet, udpGanglionPortRx, udpGanglionIP);
-    udpTx = new UDPSend(udpGanglionPortTx, udpGanglionIP);
+    // Initialize TCP connection
+    tcpClient = new Client(applet, tcpGanglionIP, tcpGanglionPort);
 
     // For storing data into
-    dataPacket = new DataPacket_ADS1299(nEEGValuesPerPacket,nAuxValuesPerPacket);  //this should always be 8 channels
+    dataPacket = new DataPacket_ADS1299(nEEGValuesPerPacket, nAuxValuesPerPacket);  //this should always be 8 channels
     for(int i = 0; i < nEEGValuesPerPacket; i++) {
       dataPacket.values[i] = 0;
     }
@@ -168,15 +207,15 @@ class OpenBCI_Ganglion {
 
   public void getBLEDevices() {
     deviceList = null;
-    udpTx.send(UDP_CMD_SCAN);
+    tcpClient.write(TCP_CMD_SCAN + TCP_STOP);
   }
 
   public void connectBLE(String id) {
-    udpTx.send(UDP_CMD_CONNECT + "," + id);
+    tcpClient.write(TCP_CMD_CONNECT + "," + id + TCP_STOP);
   }
 
   public void disconnectBLE() {
-    udpTx.send(UDP_CMD_DISCONNECT);
+    tcpClient.write(TCP_CMD_DISCONNECT + TCP_STOP);
   }
 
   public void updateSyncState() {
@@ -195,7 +234,7 @@ class OpenBCI_Ganglion {
   void startDataTransfer(){
     changeState(STATE_NORMAL);  // make sure it's now interpretting as binary
     println("OpenBCI_Ganglion: startDataTransfer(): sending \'" + command_startBinary);
-    udpTx.send(UDP_CMD_COMMAND + "," + command_startBinary);
+    tcpClient.write(TCP_CMD_COMMAND + "," + command_startBinary + TCP_STOP);
   }
 
   /**
@@ -204,7 +243,7 @@ class OpenBCI_Ganglion {
   public void stopDataTransfer() {
     changeState(STATE_STOPPED);  // make sure it's now interpretting as binary
     println("OpenBCI_Ganglion: stopDataTransfer(): sending \'" + command_stop);
-    udpTx.send(UDP_CMD_COMMAND + "," + command_stop);
+    tcpClient.write(TCP_CMD_COMMAND + "," + command_stop + TCP_STOP);
   }
 
   private void printGanglion(String msg) {
