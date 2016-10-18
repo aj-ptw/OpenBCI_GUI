@@ -3,7 +3,6 @@ import processing.data.*;
 import processing.event.*; 
 import processing.opengl.*; 
 
-import ddf.minim.analysis.*; 
 import ddf.minim.*; 
 import ddf.minim.ugens.*; 
 import java.lang.Math; 
@@ -15,10 +14,14 @@ import java.awt.event.*;
 import netP5.*; 
 import oscP5.*; 
 import hypermedia.net.*; 
+import processing.net.*; 
 import grafica.*; 
+import java.lang.reflect.*; 
+import java.awt.MouseInfo; 
 import controlP5.*; 
 import java.text.DateFormat; 
 import java.text.SimpleDateFormat; 
+import ddf.minim.analysis.*; 
 import grafica.*; 
 import java.util.Random; 
 import org.gwoptics.graphics.*; 
@@ -70,9 +73,7 @@ public class OpenBCI_GUI extends PApplet {
 //   No warranty. Use at your own risk. Use for whatever you'd like.
 //
 ////////////////////////////////////////////////////////////////////////////////
-
- //for FFT
-  // commented because too broad.. contains "Controller" class which is also contained in ControlP5... need to be more specific // To make sound.  Following minim example "frequencyModulation"
+  // To make sound.  Following minim example "frequencyModulation"
  // To make sound.  Following minim example "frequencyModulation"
  //for exp, log, sqrt...they seem better than Processing's built-in
 
@@ -83,7 +84,34 @@ public class OpenBCI_GUI extends PApplet {
  //for OSC networking
  //for OSC networking
  //for UDP networking
+ // For TCP networking
 
+ // For callbacks
+
+
+//import java.awt.*;
+//import java.awt.Point;
+
+//import processing.core.PConstants;
+//import java.awt.Window;
+//import java.awt.Component;
+//import java.awt.Container;
+
+//package processing.opengl;
+//import java.awt.Component.*;
+//import java.awt.GraphicsDevice;
+//import java.awt.GraphicsEnvironment;
+//import java.awt.Point;
+//import java.awt.Rectangle;
+//import java.awt.image.BufferedImage;
+//import java.awt.image.DataBufferInt;
+
+//import processing.opengl.GLWindow;
+//import com.sun.javafx.newt.opengl.GLWindow;
+//import Graphics.Rendering.OpenGL;
+//import java.awt.Graphics.UI.GLWindow;
+//import qualified Graphics.UI.GLWindow as Window;
+//import com.sun.javafx.newt.opengl.GLWindow;
 
 
 //------------------------------------------------------------------------
@@ -97,7 +125,7 @@ boolean hasIntroAnimation = false;
 PImage cog;
 
 //choose where to get the EEG data
-final int DATASOURCE_NORMAL = 3;  //looking for signal from OpenBCI board via Serial/COM port, no Aux data
+final int DATASOURCE_GANGLION = 3;  //looking for signal from OpenBCI board via Serial/COM port, no Aux data
 final int DATASOURCE_PLAYBACKFILE = 1;  //playback from a pre-recorded text file
 final int DATASOURCE_SYNTHETIC = 2;  //Synthetically generated data
 final int DATASOURCE_NORMAL_W_AUX = 0; // new default, data from serial with Accel data CHIP 2014-11-03
@@ -116,6 +144,9 @@ OpenBCI_ADS1299 openBCI = new OpenBCI_ADS1299(); //dummy creation to get access 
 String openBCI_portName = "N/A";  //starts as N/A but is selected from control panel to match your OpenBCI USB Dongle's serial/COM
 int openBCI_baud = 115200; //baud rate from the Arduino
 
+OpenBCI_Ganglion ganglion; //dummy creation to get access to constants, create real one later
+String ganglion_portName = "N/A";
+
 ////// ---- Define variables related to OpenBCI board operations
 //Define number of channels from openBCI...first EEG channels, then aux channels
 int nchan = 8; //Normally, 8 or 16.  Choose a smaller number to show fewer on the GUI
@@ -128,7 +159,7 @@ final int threshold_railed_warn = PApplet.parseInt(pow(2, 23)*0.75f); //set a so
 int sdSetting = 0; //0 = do not write; 1 = 5 min; 2 = 15 min; 3 = 30 min; etc...
 String sdSettingString = "Do not write to SD";
 //openBCI data packet
-final int nDataBackBuff = 3*(int)openBCI.get_fs_Hz();
+final int nDataBackBuff = 3*(int)get_fs_Hz_safe();
 DataPacket_ADS1299 dataPacketBuff[] = new DataPacket_ADS1299[nDataBackBuff]; //allocate the array, but doesn't call constructor.  Still need to call the constructor!
 int curDataPacketInd = -1;
 int lastReadDataPacketInd = -1;
@@ -143,7 +174,9 @@ int newPacketCounter = 0;
 long timeOfInit;
 long timeSinceStopRunning = 1000;
 int prev_time_millis = 0;
-final int nPointsPerUpdate = 50; //update the GUI after this many data points have been received
+
+//final int nPointsPerUpdate = 50; //update the GUI after this many data points have been received
+final int nPointsPerUpdate = 24; //update the GUI after this many data points have been received
 
 //define some data fields for handling data here in processing
 float dataBuffX[];  //define the size later
@@ -151,6 +184,7 @@ float dataBuffY_uV[][]; //2D array to handle multiple data channels, each row is
 float dataBuffY_filtY_uV[][];
 float yLittleBuff[] = new float[nPointsPerUpdate];
 float yLittleBuff_uV[][] = new float[nchan][nPointsPerUpdate]; //small buffer used to send data to the filters
+float auxBuff[][] = new float[3][nPointsPerUpdate];
 float data_elec_imp_ohm[];
 
 //variables for writing EEG data out to a file
@@ -211,10 +245,16 @@ PFont f2;
 PFont f3;
 
 EMG_Widget motorWidget;
+Accelerometer_Widget accelWidget;
+PulseSensor_Widget pulseWidget;
 
 boolean no_start_connection = false;
 boolean has_processed = false;
 boolean isOldData = false;
+
+int indices = 0;
+
+boolean synthesizeData = false;
 
 //------------------------------------------------------------------------
 //                       Global Functions
@@ -234,7 +274,7 @@ public void setup() {
   //if (frame != null) frame.setResizable(true);  //make window resizable
   //attach exit handler
   //prepareExitHandler();
-  frameRate(30); //refresh rate ... this will slow automatically, if your processor can't handle the specified rate
+  frameRate(60); //refresh rate ... this will slow automatically, if your processor can't handle the specified rate
    //turn this off if it's too slow
 
   surface.setResizable(true);  //updated from frame.setResizable in Processing 2
@@ -267,6 +307,8 @@ public void setup() {
   }
   );
 
+  ganglion = new OpenBCI_Ganglion(this);
+
   //set up controlPanelCollapser button
   fontInfo = new PlotFontInfo();
   helpWidget = new HelpWidget(0, win_y - 30, win_x, 30);
@@ -289,6 +331,12 @@ public void setup() {
 
   playground = new Playground(navBarHeight);
 
+
+  accelWidget = new Accelerometer_Widget(navBarHeight);
+  accelWidget.initPlayground(openBCI);
+
+  pulseWidget = new PulseSensor_Widget(navBarHeight);
+  pulseWidget.initPlayground(openBCI);
   //attempt to open a serial port for "output"
   try {
     verbosePrint("OpenBCI_GUI.pde:  attempting to open serial port for data output = " + serial_output_portName);
@@ -320,6 +368,15 @@ public void draw() {
 //====================== END-OF-DRAW ==========================//
 //====================== END-OF-DRAW ==========================//
 
+public void tcpEvent(String msg) {
+  // println("GanglionSync: udpEvent " + msg);
+  if (ganglion.parseMessage(msg)) {
+    // Refresh the BLE list
+    controlPanel.bleBox.refreshBLEList();
+  }
+
+}
+
 int pointCounter = 0;
 int prevBytes = 0;
 int prevMillis = millis();
@@ -334,7 +391,7 @@ public void initSystem() {
 
   //prepare data variables
   verbosePrint("OpenBCI_GUI: initSystem: Preparing data variables...");
-  dataBuffX = new float[(int)(dataBuff_len_sec * openBCI.get_fs_Hz())];
+  dataBuffX = new float[(int)(dataBuff_len_sec * get_fs_Hz_safe())];
   dataBuffY_uV = new float[nchan][dataBuffX.length];
   dataBuffY_filtY_uV = new float[nchan][dataBuffX.length];
   //data_std_uV = new float[nchan];
@@ -346,24 +403,24 @@ public void initSystem() {
     // dataPacketBuff[i] = new DataPacket_ADS1299(OpenBCI_Nchannels+n_aux_ifEnabled);
     dataPacketBuff[i] = new DataPacket_ADS1299(nchan, n_aux_ifEnabled);
   }
-  dataProcessing = new DataProcessing(nchan, openBCI.get_fs_Hz());
-  dataProcessing_user = new DataProcessing_User(nchan, openBCI.get_fs_Hz());
+  dataProcessing = new DataProcessing(nchan, get_fs_Hz_safe());
+  dataProcessing_user = new DataProcessing_User(nchan, get_fs_Hz_safe());
 
 
 
 
   //initialize the data
-  prepareData(dataBuffX, dataBuffY_uV, openBCI.get_fs_Hz());
+  prepareData(dataBuffX, dataBuffY_uV, get_fs_Hz_safe());
 
   verbosePrint("OpenBCI_GUI: initSystem: -- Init 1 --");
 
   //initialize the FFT objects
   for (int Ichan=0; Ichan < nchan; Ichan++) {
     verbosePrint("a--"+Ichan);
-    fftBuff[Ichan] = new FFT(Nfft, openBCI.get_fs_Hz());
-  };  //make the FFT objects
+    fftBuff[Ichan] = new FFT(Nfft, get_fs_Hz_safe());
+  }  //make the FFT objects
   verbosePrint("OpenBCI_GUI: initSystem: b");
-  initializeFFTObjects(fftBuff, dataBuffY_uV, Nfft, openBCI.get_fs_Hz());
+  initializeFFTObjects(fftBuff, dataBuffY_uV, Nfft, get_fs_Hz_safe());
 
   //prepare some signal processing stuff
   //for (int Ichan=0; Ichan < nchan; Ichan++) { detData_freqDomain[Ichan] = new DetectionData_FreqDomain(); }
@@ -372,9 +429,7 @@ public void initSystem() {
 
   //prepare the source of the input data
   switch (eegDataSource) {
-  case DATASOURCE_NORMAL:
   case DATASOURCE_NORMAL_W_AUX:
-
     // int nDataValuesPerPacket = OpenBCI_Nchannels;
     int nEEDataValuesPerPacket = nchan;
     boolean useAux = false;
@@ -382,6 +437,8 @@ public void initSystem() {
     openBCI = new OpenBCI_ADS1299(this, openBCI_portName, openBCI_baud, nEEDataValuesPerPacket, useAux, n_aux_ifEnabled); //this also starts the data transfer after XX seconds
     break;
   case DATASOURCE_SYNTHETIC:
+    synthesizeData = true;
+
     //do nothing
     break;
   case DATASOURCE_PLAYBACKFILE:
@@ -395,9 +452,12 @@ public void initSystem() {
       println("   : quitting...");
       exit();
     }
-    println("OpenBCI_GUI: initSystem: loading complete.  " + playbackData_table.getRowCount() + " rows of data, which is " + round(PApplet.parseFloat(playbackData_table.getRowCount())/openBCI.get_fs_Hz()) + " seconds of EEG data");
+    println("OpenBCI_GUI: initSystem: loading complete.  " + playbackData_table.getRowCount() + " rows of data, which is " + round(PApplet.parseFloat(playbackData_table.getRowCount())/get_fs_Hz_safe()) + " seconds of EEG data");
     //removing first column of data from data file...the first column is a time index and not eeg data
     playbackData_table.removeColumn(0);
+    break;
+  case DATASOURCE_GANGLION:
+    ganglion.connectBLE(ganglion_portName);
     break;
   default:
   }
@@ -413,16 +473,29 @@ public void initSystem() {
   verbosePrint("OpenBCI_GUI: initSystem: -- Init 4 --");
 
   //open data file
-  if ((eegDataSource == DATASOURCE_NORMAL) || (eegDataSource == DATASOURCE_NORMAL_W_AUX)) openNewLogFile(fileName);  //open a new log file
+  if (eegDataSource == DATASOURCE_NORMAL_W_AUX) openNewLogFile(fileName);  //open a new log file
+  if (eegDataSource == DATASOURCE_GANGLION) openNewLogFile(fileName); // println("open ganglion output file");
 
   nextPlayback_millis = millis(); //used for synthesizeData and readFromFile.  This restarts the clock that keeps the playback at the right pace.
 
-  if (eegDataSource != DATASOURCE_NORMAL && eegDataSource != DATASOURCE_NORMAL_W_AUX) {
+  if (eegDataSource != DATASOURCE_GANGLION && eegDataSource != DATASOURCE_NORMAL_W_AUX) {
     systemMode = 10; //tell system it's ok to leave control panel and start interfacing GUI
   }
   //sync GUI default settings with OpenBCI's default settings...
   // openBCI.syncWithHardware(); //this starts the sequence off ... read in OpenBCI_ADS1299 iterates through the rest based on the ASCII trigger "$$$"
   // verbosePrint("OpenBCI_GUI: initSystem: -- Init 5 [COMPLETE] --");
+}
+
+/**
+ * @description Useful function to get the correct sample rate based on data source
+ * @returns `float` - The frequency / sample rate of the data source
+ */
+public float get_fs_Hz_safe() {
+  if (eegDataSource == DATASOURCE_GANGLION) {
+    return ganglion.get_fs_Hz();
+  } else {
+    return openBCI.get_fs_Hz();
+  }
 }
 
 //halt the data collection
@@ -443,9 +516,12 @@ public void haltSystem() {
 
   // stopDataTransfer(); // make sure to stop data transfer, if data is streaming and being drawn
 
-  if ((eegDataSource == DATASOURCE_NORMAL) || (eegDataSource == DATASOURCE_NORMAL_W_AUX)) {
+  if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
     closeLogFile();  //close log file
     openBCI.closeSDandSerialPort();
+  }
+  if (eegDataSource == DATASOURCE_GANGLION) {
+    println("closed ganglion file");
   }
   systemMode = 0;
 }
@@ -542,7 +618,7 @@ public void systemUpdate() { // for updating data values and variables
     }
 
     //re-initialize GUI if screen has been resized and it's been more than 1/2 seccond (to prevent reinitialization of GUI from happening too often)
-    if(screenHasBeenResized){
+    if (screenHasBeenResized) {
       GUIWidgets_screenResized(width, height);
     }
     if (screenHasBeenResized == true && (millis() - timeOfLastScreenResize) > reinitializeGUIdelay) {
@@ -551,9 +627,13 @@ public void systemUpdate() { // for updating data values and variables
       timeOfGUIreinitialize = millis();
       initializeGUI();
       playground.x = width; //reset the x for the playground...
+      accelWidget.x = width;
+      pulseWidget.x = width;
     }
 
     playground.update();
+    accelWidget.update();
+    pulseWidget.update();
   }
 
   controlPanel.update();
@@ -574,15 +654,17 @@ public void systemDraw() { //for drawing to the screen
 
       //update the title of the figure;
       switch (eegDataSource) {
-      case DATASOURCE_NORMAL:
       case DATASOURCE_NORMAL_W_AUX:
-        surface.setTitle(PApplet.parseInt(frameRate) + " fps, Byte Count = " + openBCI_byteCount + ", bit rate = " + byteRate_perSec*8 + " bps" + ", " + PApplet.parseInt(PApplet.parseFloat(fileoutput.getRowsWritten())/openBCI.get_fs_Hz()) + " secs Saved, Writing to " + output_fname);
+        surface.setTitle(PApplet.parseInt(frameRate) + " fps, Byte Count = " + openBCI_byteCount + ", bit rate = " + byteRate_perSec*8 + " bps" + ", " + PApplet.parseInt(PApplet.parseFloat(fileoutput.getRowsWritten())/get_fs_Hz_safe()) + " secs Saved, Writing to " + output_fname);
         break;
       case DATASOURCE_SYNTHETIC:
         surface.setTitle(PApplet.parseInt(frameRate) + " fps, Using Synthetic EEG Data");
         break;
       case DATASOURCE_PLAYBACKFILE:
-        surface.setTitle(PApplet.parseInt(frameRate) + " fps, Playing " + PApplet.parseInt(PApplet.parseFloat(currentTableRowIndex)/openBCI.get_fs_Hz()) + " of " + PApplet.parseInt(PApplet.parseFloat(playbackData_table.getRowCount())/openBCI.get_fs_Hz()) + " secs, Reading from: " + playbackData_fname);
+        surface.setTitle(PApplet.parseInt(frameRate) + " fps, Playing " + PApplet.parseInt(PApplet.parseFloat(currentTableRowIndex)/get_fs_Hz_safe()) + " of " + PApplet.parseInt(PApplet.parseFloat(playbackData_table.getRowCount())/get_fs_Hz_safe()) + " secs, Reading from: " + playbackData_fname);
+        break;
+      case DATASOURCE_GANGLION:
+        surface.setTitle(PApplet.parseInt(frameRate) + " fps, Ganglion!");
         break;
       }
     }
@@ -618,8 +700,9 @@ public void systemDraw() { //for drawing to the screen
     }
 
     playground.draw();
-
     motorWidget.draw();
+    accelWidget.draw();
+    pulseWidget.draw();
     //dataProcessing_user.draw();
     drawContainers();
   } else { //systemMode != 10
@@ -668,6 +751,8 @@ public void systemDraw() { //for drawing to the screen
       systemMode = 0;
     }
   }
+
+  mouseOutOfBounds(); // to fix
 }
 
 public void introAnimation() {
@@ -694,10 +779,401 @@ public void introAnimation() {
   popStyle();
 }
 
+//CODE FOR FIXING WEIRD EXIT CRASH ISSUE -- 7/27/16 ===========================
+boolean mouseInFrame = false;
+boolean windowOriginSet = false;
+int appletOriginX = 0;
+int appletOriginY = 0;
+PVector loc;
+
+public void mouseOutOfBounds() {
+  if (windowOriginSet && mouseInFrame) {
+    //if (mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height) {
+    //  println("mouseX " + mouseX);
+    //  println("mouseY " + mouseY);
+    //  println("true X " + MouseInfo.getPointerInfo().getLocation().x);
+    //  println("true Y " + MouseInfo.getPointerInfo().getLocation().y);
+    //  println("Window X " + loc.x);
+    //  println("Window Y " + loc.y);
+    //  println();
+    //}
+    if (MouseInfo.getPointerInfo().getLocation().x <= appletOriginX ||
+      MouseInfo.getPointerInfo().getLocation().x >= appletOriginX+width ||
+      MouseInfo.getPointerInfo().getLocation().y <= appletOriginY ||
+      MouseInfo.getPointerInfo().getLocation().y >= appletOriginY+height) {
+      mouseX = 0;
+      mouseY = 0;
+      // println("Mouse out of bounds!");
+      mouseInFrame = false;
+    }
+  } else {
+    if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
+      loc = getWindowLocation(P2D);
+      appletOriginX = (int)loc.x;
+      appletOriginY = (int)loc.y;
+      windowOriginSet = true;
+      mouseInFrame = true;
+      // println("WINDOW ORIGIN SET!");
+    }
+  }
+}
+
+public PVector getWindowLocation(String renderer) {
+  PVector l = new PVector();
+  if (renderer == P2D || renderer == P3D) {
+    com.jogamp.nativewindow.util.Point p = new com.jogamp.nativewindow.util.Point();
+    ((com.jogamp.newt.opengl.GLWindow)surface.getNative()).getLocationOnScreen(p);
+    l.x = p.getX();
+    l.y = p.getY();
+  } else if (renderer == JAVA2D) {
+    java.awt.Frame f =  (java.awt.Frame) ((processing.awt.PSurfaceAWT.SmoothCanvas) surface.getNative()).getFrame();
+    l.x = f.getX();
+    l.y = f.getY();
+  }
+  return l;
+}
+//END OF CODE FOR FIXING WEIRD EXIT CRASH ISSUE -- 7/27/16 ===========================
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Accelerometer_Widget is used to visiualze accelerometer data
+//
+//  Created: Colin Fausnaught, September 2016
+//           Source Code by Joel Murphy
+//
+//  Use '/' to toggle between accelerometer and pulse sensor.
+////////////////////////////////////////////////////////////////////////////////
+
+class Accelerometer_Widget extends Playground{
+  
+
+  //button for opening and closing
+  float x, y, w, h;
+  int boxBG;
+  int strokeColor;
+
+  float topMargin, bottomMargin;
+  float expandLimit = width/2.5f;
+  boolean isOpen;
+  boolean collapsing;
+
+  // Accelerometer Stuff
+  int AccelWindowWidth;
+  int AccelWindowHeight; 
+  int AccelWindowX;
+  int AccelWindowY;
+  float PolarWindowX;
+  float PolarWindowY;
+  int PolarWindowWidth;
+  int PolarWindowHeight;
+  float PolarCorner;
+  int eggshell;
+  int Xcolor;
+  int Ycolor;
+  int Zcolor;
+  float currentXvalue;
+  float currentYvalue;
+  float currentZvalue;
+  int[] X;
+  int[] Y;      // 
+  int[] Z;
+  float dummyX;
+  float dummyY;
+  float dummyZ;
+  boolean Xrising;
+  boolean Yrising;
+  boolean Zrising;
+  boolean OBCI_inited= false;
+
+
+  OpenBCI_ADS1299 OBCI;  
+
+  Button collapser;
+
+  Accelerometer_Widget(int _topMargin) {
+    super(_topMargin);
+
+    topMargin = _topMargin;
+    bottomMargin = helpWidget.h;
+
+    isOpen = false;
+    collapsing = true;
+
+    boxBG = bgColor;
+    strokeColor = color(138, 146, 153);
+    collapser = new Button(0, 0, 20, 60, "<", 14);
+
+    x = width;
+    y = topMargin;
+    w = 0;
+    h = (height - (topMargin+bottomMargin))/2;
+
+    // Accel Sensor Stuff
+    eggshell = color(255, 253, 248);
+    Xcolor = color(255, 36, 36);
+    Ycolor = color(36, 255, 36);
+    Zcolor = color(36, 100, 255);
+    AccelWindowWidth = 440;
+    AccelWindowHeight = 183;
+    AccelWindowX = PApplet.parseInt(x)+5;
+    AccelWindowY = PApplet.parseInt(y)-10+PApplet.parseInt(h)/2;
+    PolarWindowWidth = 155;
+    PolarWindowHeight = 155;
+    X = new int[AccelWindowWidth];
+    Y = new int[AccelWindowWidth];
+    Z = new int[AccelWindowWidth];
+    Xrising = true; 
+    Yrising = false; 
+    Zrising = true;
+    for (int i=0; i<X.length; i++) {  // initialize the accelerometer data
+      X[i] = AccelWindowY + AccelWindowHeight/4; // X at 1/4
+      Y[i] = AccelWindowY + AccelWindowHeight/2;  // Y at 1/2
+      Z[i] = AccelWindowY + (AccelWindowHeight/4)*3;  // Z at 3/4
+    }
+  }
+
+  public void initPlayground(OpenBCI_ADS1299 _OBCI) {
+    OBCI = _OBCI;
+    OBCI_inited = true;
+  }
+
+  public void update() {
+    // verbosePrint("uh huh");
+    if (collapsing) {
+      collapse();
+    } else {
+      expand();
+    }
+
+    if (x > width) {
+      x = width;
+    }
+  }
+
+  public void draw() {
+    // verbosePrint("yeaaa");
+    if(drawAccel){
+      if (OBCI_inited) {
+  
+        pushStyle();
+        fill(boxBG);
+        stroke(strokeColor);
+        rect(width - w, topMargin, w, h);
+        textFont(f2, 24);
+        textAlign(LEFT, TOP);
+        fill(eggshell);
+        text("Acellerometer Gs", x + 10, y + 10);
+  
+  
+        PolarWindowX = x+340;
+        PolarWindowY = y+83;
+        PolarCorner = (sqrt(2)*PolarWindowWidth/2)/2;
+  
+        fill(eggshell);  // pulse window background
+        stroke(eggshell);
+        rect(AccelWindowX, AccelWindowY, AccelWindowWidth, AccelWindowHeight);
+        //rect(PolarWindowX-PolarWindowWidth/2, PolarWindowY-PolarWindowHeight/2, PolarWindowWidth, PolarWindowHeight);
+        ellipse(PolarWindowX,PolarWindowY,PolarWindowWidth,PolarWindowHeight);
+        stroke(180);
+        line(PolarWindowX-PolarWindowWidth/2, PolarWindowY, PolarWindowX+PolarWindowWidth/2, PolarWindowY);
+        line(PolarWindowX, PolarWindowY-PolarWindowHeight/2, PolarWindowX, PolarWindowY+PolarWindowHeight/2);
+        line(PolarWindowX-PolarCorner, PolarWindowY+PolarCorner, PolarWindowX+PolarCorner, PolarWindowY-PolarCorner);
+        fill(50);
+        textFont(f2, 16);
+        text("z", PolarWindowX-12, (PolarWindowY-PolarWindowHeight/2));
+        text("x", (PolarWindowX-PolarWindowWidth/2)+2, PolarWindowY-15);
+        text("y", (PolarWindowX-PolarCorner)-5, (PolarWindowY+PolarCorner)-20);
+        textFont(f2, 30);
+        if (synthesizeData) {
+          synthesizeAccelerometerData();
+          dummyX = map(X[X.length-1], AccelWindowY, AccelWindowY+AccelWindowHeight, 4.0f, -4.0f);
+          dummyY = map(Y[Y.length-1], AccelWindowY, AccelWindowY+AccelWindowHeight, 4.0f, -4.0f);
+          dummyZ = map(Z[Z.length-1], AccelWindowY, AccelWindowY+AccelWindowHeight, 4.0f, -4.0f);
+          fill(Xcolor);
+          text("X "+nf(dummyX, 1, 3), x+10, y+40);
+          fill(Ycolor);
+          text("Y "+nf(dummyY, 1, 3), x+10, y+80);
+          fill(Zcolor);
+          text("Z "+nf(dummyZ, 1, 3), x+10, y+120);
+        } else {
+          currentXvalue = OBCI.validAuxValues[0]*OBCI.get_scale_fac_accel_G_per_count();
+          currentYvalue = OBCI.validAuxValues[1]*OBCI.get_scale_fac_accel_G_per_count();
+          currentZvalue = OBCI.validAuxValues[2]*OBCI.get_scale_fac_accel_G_per_count();
+          fill(Xcolor);
+          text("X " + nf(currentXvalue, 1, 3), x+10, y+40);
+          fill(Ycolor);
+          text("Y " + nf(currentYvalue, 1, 3), x+10, y+80);
+          fill(Zcolor);
+          text("Z " + nf(currentZvalue, 1, 3), x+10, y+120);
+          X[X.length-1] = 
+            PApplet.parseInt(map(currentXvalue, -4.0f, 4.0f, PApplet.parseFloat(AccelWindowY+AccelWindowHeight), PApplet.parseFloat(AccelWindowY)));
+          X[X.length-1] = constrain(X[X.length-1], AccelWindowY, AccelWindowY+AccelWindowHeight);
+          Y[Y.length-1] = 
+            PApplet.parseInt(map(currentYvalue, -4.0f, 4.0f, PApplet.parseFloat(AccelWindowY+AccelWindowHeight), PApplet.parseFloat(AccelWindowY)));
+          Y[Y.length-1] = constrain(Y[Y.length-1], AccelWindowY, AccelWindowY+AccelWindowHeight);
+          Z[Z.length-1] = 
+            PApplet.parseInt(map(currentZvalue, -4.0f, 4.0f, PApplet.parseFloat(AccelWindowY+AccelWindowHeight), PApplet.parseFloat(AccelWindowY)));
+          Z[Z.length-1] = constrain(Z[Z.length-1], AccelWindowY, AccelWindowY+AccelWindowHeight);
+        }
+  
+        for (int i = 0; i < X.length-1; i++) {      // move the pulse waveform by
+          X[i] = X[i+1]; 
+          Y[i] = Y[i+1];
+          Z[i] = Z[i+1];
+        }
+  
+  
+  
+        noFill();
+        beginShape();                                  // using beginShape() renders fast
+        stroke(Xcolor);
+        for (int i = 0; i < X.length; i++) {    
+          vertex(AccelWindowX+i, X[i]);                    //draw a line connecting the data points
+        }
+        endShape();
+        strokeWeight(3);
+        if (synthesizeData) { 
+          line(PolarWindowX, PolarWindowY, PolarWindowX+map(dummyX, -4.0f, 4.0f, -77, 77), PolarWindowY);
+        } else {
+          line(PolarWindowX, PolarWindowY, PolarWindowX+map(currentXvalue, -4.0f, 4.0f, -77, 77), PolarWindowY);
+        }
+        strokeWeight(1);
+        beginShape();
+        stroke(Ycolor);
+        for (int i = 0; i < Y.length; i++) {    
+          vertex(AccelWindowX+i, Y[i]);
+        }
+        endShape();
+        strokeWeight(3);
+        if (synthesizeData) { 
+          line(PolarWindowX, PolarWindowY, PolarWindowX+map((sqrt(2)*dummyY/2), -4.0f, 4.0f, -77, 77), PolarWindowY-map((sqrt(2)*dummyY/2), -4.0f, 4.0f, -77, 77));
+        } else {
+          line(PolarWindowX, PolarWindowY, PolarWindowX+map((sqrt(2)*currentYvalue/2), -4.0f, 4.0f, -77, 77), PolarWindowY-map((sqrt(2)*currentYvalue/2), -4.0f, 4.0f, -77, 77));
+        }
+        strokeWeight(1);
+        beginShape();
+        stroke(Zcolor);
+        for (int i = 0; i < Z.length; i++) {    
+          vertex(AccelWindowX+i, Z[i]);
+        }
+        endShape();
+        strokeWeight(3);
+        if (synthesizeData) { 
+          line(PolarWindowX, PolarWindowY, PolarWindowX, PolarWindowY+map(dummyZ, -4.0f, 4.0f, -77, 77));
+        } else {
+          line(PolarWindowX, PolarWindowY, PolarWindowX, PolarWindowY+map(currentZvalue, -4.0f, 4.0f, -77, 77));
+        }
+        strokeWeight(1);
+  
+  
+  
+  
+        fill(255, 0, 0);
+        collapser.draw(PApplet.parseInt(x - collapser.but_dx), PApplet.parseInt(topMargin + (h-collapser.but_dy)/2));
+        popStyle();
+      }
+    }
+  }
+
+  public void synthesizeAccelerometerData() {
+    if (Xrising) {  // MAKE A SAW WAVE FOR TESTING
+      X[X.length-1]--;   // place the new raw datapoint at the end of the array
+      if (X[X.length-1] == AccelWindowY) { 
+        Xrising = false;
+      }
+    } else {
+      X[X.length-1]++;   // place the new raw datapoint at the end of the array
+      if (X[X.length-1] == AccelWindowY+AccelWindowHeight) { 
+        Xrising = true;
+      }
+    }
+
+    if (Yrising) {  // MAKE A SAW WAVE FOR TESTING
+      Y[Y.length-1]--;   // place the new raw datapoint at the end of the array
+      if (Y[Y.length-1] == AccelWindowY) { 
+        Yrising = false;
+      }
+    } else {
+      Y[Y.length-1]++;   // place the new raw datapoint at the end of the array
+      if (Y[Y.length-1] == AccelWindowY+AccelWindowHeight) { 
+        Yrising = true;
+      }
+    }
+
+    if (Zrising) {  // MAKE A SAW WAVE FOR TESTING
+      Z[Z.length-1]--;   // place the new raw datapoint at the end of the array
+      if (Z[Z.length-1] == AccelWindowY) { 
+        Zrising = false;
+      }
+    } else {
+      Z[Z.length-1]++;   // place the new raw datapoint at the end of the array
+      if (Z[Z.length-1] == AccelWindowY+AccelWindowHeight) { 
+        Zrising = true;
+      }
+    }
+  }
+
+  public boolean isMouseHere() {
+    if (mouseX >= x && mouseX <= width && mouseY >= y && mouseY <= height - bottomMargin) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  public boolean isMouseInButton() {
+    verbosePrint("Playground: isMouseInButton: attempting");
+    if (mouseX >= collapser.but_x && mouseX <= collapser.but_x+collapser.but_dx && mouseY >= collapser.but_y && mouseY <= collapser.but_y + collapser.but_dy) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  public void toggleWindow() {
+    if (isOpen) {//if open
+      verbosePrint("close");
+      collapsing = true;//collapsing = true;
+      isOpen = false;
+      collapser.but_txt = "<";
+    } else {//if closed
+      verbosePrint("open");
+      collapsing = false;//expanding = true;
+      isOpen = true;
+      collapser.but_txt = ">";
+    }
+  }
+
+  public void mousePressed() {
+    verbosePrint("Playground >> mousePressed()");
+  }
+
+  public void mouseReleased() {
+    verbosePrint("Playground >> mouseReleased()");
+  }
+
+  public void expand() {
+    if (w <= expandLimit) {
+      w = w + 50;
+      x = width - w;
+      AccelWindowX = PApplet.parseInt(x)+5;
+    }
+  }
+
+  public void collapse() {
+    if (w >= 0) {
+      w = w - 50;
+      x = width - w;
+      AccelWindowX = PApplet.parseInt(x)+5;
+    }
+  }
+}
+  
+  
+
 //////////////////////////////////////////////////////////////////////////
 //
 //    Channel Controller
-//    - responsible for addressing channel data (Ganglion 1-4, 32bit 
+//    - responsible for addressing channel data (Ganglion 1-4, 32bit
 //    - Select default configuration (EEG, EKG, EMG)
 //    - Select Electrode Count (8 vs 16)
 //    - Select data mode (synthetic, playback file, real-time)
@@ -721,13 +1197,13 @@ char[][] impedanceCheckValues = new char [nchan][2];
 
 //Channel Colors -- Defaulted to matching the OpenBCI electrode ribbon cable
 int[] channelColors = {
-  color(129, 129, 129), 
-  color(124, 75, 141), 
-  color(54, 87, 158), 
-  color(49, 113, 89), 
-  color(221, 178, 13), 
-  color(253, 94, 52), 
-  color(224, 56, 45), 
+  color(129, 129, 129),
+  color(124, 75, 141),
+  color(54, 87, 158),
+  color(49, 113, 89),
+  color(221, 178, 13),
+  color(253, 94, 52),
+  color(224, 56, 45),
   color(162, 82, 49)
 };
 
@@ -743,27 +1219,33 @@ public void updateChannelArrays(int _nchan) {
 //activateChannel: Ichan is [0 nchan-1] (aka zero referenced)
 public void activateChannel(int Ichan) {
   println("OpenBCI_GUI: activating channel " + (Ichan+1));
-  if (eegDataSource == DATASOURCE_NORMAL || eegDataSource == DATASOURCE_NORMAL_W_AUX) {
+  if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
     if (openBCI.isSerialPortOpen()) {
       verbosePrint("**");
       openBCI.changeChannelState(Ichan, true); //activate
     }
+  } else if (eegDataSource == DATASOURCE_GANGLION) {
+    // println("activating channel on ganglion");
+    ganglion.changeChannelState(Ichan, true);
   }
   if (Ichan < gui.chanButtons.length) {
-    channelSettingValues[Ichan][0] = '0'; 
+    channelSettingValues[Ichan][0] = '0';
     gui.cc.update();
   }
-}  
+}
 public void deactivateChannel(int Ichan) {
   println("OpenBCI_GUI: deactivating channel " + (Ichan+1));
-  if (eegDataSource == DATASOURCE_NORMAL || eegDataSource == DATASOURCE_NORMAL_W_AUX) {
+  if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
     if (openBCI.isSerialPortOpen()) {
       verbosePrint("**");
       openBCI.changeChannelState(Ichan, false); //de-activate
     }
+  } else if (eegDataSource == DATASOURCE_GANGLION) {
+    // println("deactivating channel on ganglion");
+    ganglion.changeChannelState(Ichan, false);
   }
   if (Ichan < gui.chanButtons.length) {
-    channelSettingValues[Ichan][0] = '1'; 
+    channelSettingValues[Ichan][0] = '1';
     gui.cc.update();
   }
 }
@@ -799,7 +1281,7 @@ class ChannelController {
   Button[][] channelSettingButtons = new Button [nchan][numSettingsPerChannel];  // [channel#][Button#]
   // char[][] channelSettingValues = new char [nchan][numSettingsPerChannel]; // [channel#][Button#-value] ... this will incfluence text of button
 
-  //buttons just to the left of 
+  //buttons just to the left of
   Button[][] impedanceCheckButtons = new Button [nchan][2];
   // char [][] impedanceCheckValues = new char [nchan][2];
 
@@ -808,7 +1290,7 @@ class ChannelController {
   // Array for storing SRB2 history settings of channels prior to shutting off .. so you can return to previous state when reactivating channel
   char[] previousBIAS = new char [nchan];
 
-  //maximum different values for the different settings (Power Down, Gain, Input Type, BIAS, SRB2, SRB1) of 
+  //maximum different values for the different settings (Power Down, Gain, Input Type, BIAS, SRB2, SRB1) of
   //refer to page 44 of ADS1299 Datasheet: http://www.ti.com/lit/ds/symlink/ads1299.pdf
   char[] maxValuesPerSetting = {
     '1', // Power Down :: (0)ON, (1)OFF
@@ -890,7 +1372,7 @@ class ChannelController {
 
     for (int i = 0; i < nchan; i++) { //for every channel
       //update buttons based on channelSettingValues[i][j]
-      for (int j = 0; j < numSettingsPerChannel; j++) {		
+      for (int j = 0; j < numSettingsPerChannel; j++) {
         switch(j) {  //what setting are we looking at
           case 0: //on/off ??
             if (channelSettingValues[i][j] == '0') channelSettingButtons[i][0].setColorNotPressed(channelColors[i%8]);// power down == false, set color to vibrant
@@ -1037,7 +1519,7 @@ class ChannelController {
       fill(0, 0, 0, 100);
       rect(x1 + w1, y1, w2, h2);
 
-      // [numChan] x 5 ... all channel setting buttons (other than on/off) 
+      // [numChan] x 5 ... all channel setting buttons (other than on/off)
       for (int i = 0; i < nchan; i++) {
         for (int j = 1; j < 6; j++) {
           // println("drawing button " + i + "," + j);
@@ -1055,7 +1537,7 @@ class ChannelController {
       text("SRB1", x2 + (w2/10)*9, y1 - 12);
 
       //if mode is not from OpenBCI, draw a dark overlay to indicate that you cannot edit these settings
-      if (eegDataSource != DATASOURCE_NORMAL && eegDataSource != DATASOURCE_NORMAL_W_AUX) {
+      if (eegDataSource != DATASOURCE_NORMAL_W_AUX && eegDataSource != DATASOURCE_GANGLION) {
         fill(0, 0, 0, 200);
         noStroke();
         rect(x2-2, y2, w2+1, h2);
@@ -1063,9 +1545,18 @@ class ChannelController {
         textSize(24);
         text("DATA SOURCE (LIVE) only", x2 + (w2/2), y2 + (h2/2));
       }
+      if (eegDataSource == DATASOURCE_GANGLION) {
+        fill(0, 0, 0, 200);
+        noStroke();
+        rect(x2-2, y2, w2+1, h2);
+        fill(255);
+        textSize(24);
+        text("COMING SOON FOR GANGLION!", x2 + (w2/2), y2 + (h2/2));
+      }
     }
 
-    if ((eegDataSource != DATASOURCE_NORMAL) && (eegDataSource != DATASOURCE_NORMAL_W_AUX)) {
+    // Do something if not in normal mode
+    if (eegDataSource != DATASOURCE_GANGLION && eegDataSource != DATASOURCE_NORMAL_W_AUX) {
       fill(0, 0, 0, 200);
       rect(x1 + w1/3 + 1, y1, 2*(w1/3) - 3, h1 - 2);
     }
@@ -1083,12 +1574,12 @@ class ChannelController {
     //if fullChannelController and one of the buttons (other than ON/OFF) is clicked
 
       //if dataSource is coming from OpenBCI, allow user to interact with channel controller
-    if ( (eegDataSource == DATASOURCE_NORMAL) || (eegDataSource == DATASOURCE_NORMAL_W_AUX) ) {
+    if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
       if (showFullController) {
         for (int i = 0; i < nchan; i++) { //When [i][j] button is clicked
-          for (int j = 1; j < numSettingsPerChannel; j++) {		
+          for (int j = 1; j < numSettingsPerChannel; j++) {
             if (channelSettingButtons[i][j].isMouseHere()) {
-              //increment [i][j] channelSettingValue by, until it reaches max values per setting [j], 
+              //increment [i][j] channelSettingValue by, until it reaches max values per setting [j],
               channelSettingButtons[i][j].wasPressed = true;
               channelSettingButtons[i][j].isActive = true;
             }
@@ -1104,7 +1595,7 @@ class ChannelController {
       }
 
       //only allow editing of impedance if dataSource == from OpenBCI
-      if ((eegDataSource == DATASOURCE_NORMAL) || (eegDataSource == DATASOURCE_NORMAL_W_AUX)) {
+      if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
         if (impedanceCheckButtons[i][0].isMouseHere()) {
           impedanceCheckButtons[i][0].wasPressed = true;
           impedanceCheckButtons[i][0].isActive = true;
@@ -1121,13 +1612,13 @@ class ChannelController {
     //if fullChannelController and one of the buttons (other than ON/OFF) is released
     if (showFullController) {
       for (int i = 0; i < nchan; i++) { //When [i][j] button is clicked
-        for (int j = 1; j < numSettingsPerChannel; j++) {		
+        for (int j = 1; j < numSettingsPerChannel; j++) {
           if (channelSettingButtons[i][j].isMouseHere() && channelSettingButtons[i][j].wasPressed == true) {
             if (channelSettingValues[i][j] < maxValuesPerSetting[j]) {
               channelSettingValues[i][j]++;	//increment [i][j] channelSettingValue by, until it reaches max values per setting [j],
             } else {
               channelSettingValues[i][j] = '0';
-            }	
+            }
             // if you're not currently writing a channel and not waiting to rewrite after you've finished mashing the button
             if (!openBCI.get_isWritingChannel() && rewriteChannelWhenDoneWriting == false) {
               initChannelWrite(i);//write new ADS1299 channel row values to OpenBCI
@@ -1150,7 +1641,7 @@ class ChannelController {
       //was on/off clicked?
       if (channelSettingButtons[i][0].isMouseHere() && channelSettingButtons[i][0].wasPressed == true) {
         if (channelSettingValues[i][0] < maxValuesPerSetting[0]) {
-          channelSettingValues[i][0] = '1';	//increment [i][j] channelSettingValue by, until it reaches max values per setting [j], 
+          channelSettingValues[i][0] = '1';	//increment [i][j] channelSettingValue by, until it reaches max values per setting [j],
           // channelSettingButtons[i][0].setColorNotPressed(color(25,25,25));
           // powerDownChannel(i);
           deactivateChannel(i);
@@ -1166,7 +1657,7 @@ class ChannelController {
       //was P imp check button clicked?
       if (impedanceCheckButtons[i][0].isMouseHere() && impedanceCheckButtons[i][0].wasPressed == true) {
         if (impedanceCheckValues[i][0] < '1') {
-          // impedanceCheckValues[i][0] = '1';	//increment [i][j] channelSettingValue by, until it reaches max values per setting [j], 
+          // impedanceCheckValues[i][0] = '1';	//increment [i][j] channelSettingValue by, until it reaches max values per setting [j],
           // channelSettingButtons[i][0].setColorNotPressed(color(25,25,25));
           // writeImpedanceSettings(i);
           initImpWrite(i, 'p', '1');
@@ -1325,7 +1816,7 @@ class ChannelController {
         tempButton = new Button (buttonX, buttonY, buttonW, buttonW, buttonString, 14);
         impedanceCheckButtons[i][j-1] = tempButton;
       }
-    }	
+    }
 
     //create all other channel setting buttons... these are only visible when the user toggles to "showFullController = true"
     for (int i = 0; i < nchan; i++) {
@@ -1667,6 +2158,8 @@ MenuList sourceList;
 MenuList serialList;
 String[] serialPorts = new String[Serial.list().length];
 
+MenuList bleList;
+
 MenuList sdTimes;
 
 MenuList channelList;
@@ -1684,6 +2177,7 @@ int networkType = 0;
 
 
 Button refreshPort;
+Button refreshBLE;
 Button autoconnect;
 Button initSystemButton;
 Button autoFileName;
@@ -1743,11 +2237,17 @@ public void controlEvent(ControlEvent theEvent) {
     output("OpenBCI Port Name = " + openBCI_portName);
   }
 
+  if (theEvent.isFrom("bleList")) {
+    Map bob = ((MenuList)theEvent.getController()).getItem(PApplet.parseInt(theEvent.getValue()));
+    ganglion_portName = (String)bob.get("headline");
+    output("Ganglion Device Name = " + ganglion_portName);
+  }
+
   if (theEvent.isFrom("sdTimes")) {
     Map bob = ((MenuList)theEvent.getController()).getItem(PApplet.parseInt(theEvent.getValue()));
     sdSettingString = (String)bob.get("headline");
     sdSetting = PApplet.parseInt(theEvent.getValue());
-    if (sdSetting != 0) {  
+    if (sdSetting != 0) {
       output("OpenBCI microSD Setting = " + sdSettingString + " recording time");
     } else {
       output("OpenBCI microSD Setting = " + sdSettingString);
@@ -1768,12 +2268,12 @@ public void controlEvent(ControlEvent theEvent) {
       networkType = 3;
     }
   }
-  
+
   if (theEvent.isFrom("channelList")){
     int setChannelInt = PApplet.parseInt(theEvent.getValue()) + 1;
     //Map bob = ((MenuList)theEvent.getController()).getItem(int(theEvent.getValue()));
-    cp5Popup.get(MenuList.class, "channelList").setVisible(false); 
-    channelPopup.setClicked(false);   
+    cp5Popup.get(MenuList.class, "channelList").setVisible(false);
+    channelPopup.setClicked(false);
     if(setChannel.wasPressed){
       set_channel(rcBox,setChannelInt);
       setChannel.wasPressed = false;
@@ -1783,14 +2283,14 @@ public void controlEvent(ControlEvent theEvent) {
       ovrChannel.wasPressed = false;
     }
     println("still goin off");
-    
+
   }
-  
+
   if (theEvent.isFrom("pollList")){
     int setChannelInt = PApplet.parseInt(theEvent.getValue());
     //Map bob = ((MenuList)theEvent.getController()).getItem(int(theEvent.getValue()));
-    cp5Popup.get(MenuList.class, "pollList").setVisible(false); 
-    channelPopup.setClicked(false);   
+    cp5Popup.get(MenuList.class, "pollList").setVisible(false);
+    channelPopup.setClicked(false);
     set_poll(rcBox,setChannelInt);
     setPoll.wasPressed = false;
   }
@@ -1823,7 +2323,8 @@ class ControlPanel {
   PlaybackFileBox playbackFileBox;
   SDConverterBox sdConverterBox;
   NetworkingBox networkingBoxPlayback;
-  
+
+  BLEBox bleBox;
 
   SDBox sdBox;
 
@@ -1837,10 +2338,10 @@ class ControlPanel {
   ControlPanel(OpenBCI_GUI mainClass) {
 
     x = 2;
-    y = 2 + controlPanelCollapser.but_dy;		
+    y = 2 + controlPanelCollapser.but_dy;
     w = controlPanelCollapser.but_dx;
     h = height - PApplet.parseInt(helpWidget.h);
-    
+
     if(hasIntroAnimation){
       isOpen = false;
     } else {
@@ -1856,10 +2357,10 @@ class ControlPanel {
     globalPadding = 10;  //controls the padding of all elements on the control panel
     globalBorder = 0;   //controls the border of all elements in the control panel ... using processing's stroke() instead
 
-    cp5 = new ControlP5(mainClass); 
+    cp5 = new ControlP5(mainClass);
     cp5Popup = new ControlP5(mainClass);
 
-    //boxes active when eegDataSource = Normal (OpenBCI) 
+    //boxes active when eegDataSource = Normal (OpenBCI)
     dataSourceBox = new DataSourceBox(x, y, w, h, globalPadding);
     serialBox = new SerialBox(x + w, dataSourceBox.y, w, h, globalPadding);
     dataLogBox = new DataLogBox(x + w, (serialBox.y + serialBox.h), w, h, globalPadding);
@@ -1869,7 +2370,7 @@ class ControlPanel {
     udpOptionsBox = new UDPOptionsBox(networkingBoxLive.x + networkingBoxLive.w, (sdBox.y + sdBox.h), w-30, networkingBoxLive.h, globalPadding);
     oscOptionsBox = new OSCOptionsBox(networkingBoxLive.x + networkingBoxLive.w, (sdBox.y + sdBox.h), w-30, networkingBoxLive.h, globalPadding);
     lslOptionsBox = new LSLOptionsBox(networkingBoxLive.x + networkingBoxLive.w, (sdBox.y + sdBox.h), w-30, networkingBoxLive.h, globalPadding);
-    
+
     //boxes active when eegDataSource = Playback
     playbackFileBox = new PlaybackFileBox(x + w, dataSourceBox.y, w, h, globalPadding);
     sdConverterBox = new SDConverterBox(x + w, (playbackFileBox.y + playbackFileBox.h), w, h, globalPadding);
@@ -1878,8 +2379,12 @@ class ControlPanel {
     rcBox = new RadioConfigBox(x+w, y, w, h, globalPadding);
     channelPopup = new ChannelPopup(x+w, y, w, h, globalPadding);
     pollPopup = new PollPopup(x+w,y,w,h,globalPadding);
-    
+
     initBox = new InitBox(x, (dataSourceBox.y + dataSourceBox.h), w, h, globalPadding);
+
+    // Ganglion
+    bleBox = new BLEBox(x + w, dataSourceBox.y, w, h, globalPadding);
+
   }
 
   public void update() {
@@ -1899,6 +2404,7 @@ class ControlPanel {
     //update all boxes if they need to be
     dataSourceBox.update();
     serialBox.update();
+    bleBox.update();
     dataLogBox.update();
     channelCountBox.update();
     sdBox.update();
@@ -1909,6 +2415,7 @@ class ControlPanel {
 
     channelPopup.update();
     serialList.updateMenu();
+    bleList.updateMenu();
 
     //SD File Conversion
     while (convertingSD == true) {
@@ -1955,10 +2462,8 @@ class ControlPanel {
         channelCountBox.draw();
         sdBox.draw();
         networkingBoxLive.draw();
-        if(rcBox.isShowing){ 
-          
+        if(rcBox.isShowing){
           rcBox.draw();
-          
           if(channelPopup.wasClicked()){
             channelPopup.draw();
             cp5Popup.get(MenuList.class, "channelList").setVisible(true);
@@ -1975,10 +2480,10 @@ class ControlPanel {
             cp5.get(MenuList.class, "serialList").setVisible(true); //make sure the serialList menulist is visible
             cp5.get(MenuList.class, "sdTimes").setVisible(true); //make sure the SD time record options menulist is visible
           }
-          
         }
         cp5.get(Textfield.class, "fileName").setVisible(true); //make sure the data file field is visible
         cp5.get(MenuList.class, "serialList").setVisible(true); //make sure the serialList menulist is visible
+        cp5.get(MenuList.class, "bleList").setVisible(false); //make sure the serialList menulist is visible
         cp5.get(MenuList.class, "sdTimes").setVisible(true); //make sure the SD time record options menulist is visible
         cp5.get(MenuList.class, "networkList").setVisible(true); //make sure the SD time record options menulist is visible
         if (networkType == -1){
@@ -1989,7 +2494,7 @@ class ControlPanel {
           cp5.get(Textfield.class, "osc_address").setVisible(false); //make sure the SD time record options menulist is visible
           cp5.get(Textfield.class, "lsl_data").setVisible(false); //make sure the SD time record options menulist is visible
           cp5.get(Textfield.class, "lsl_aux").setVisible(false); //make sure the SD time record options menulist is visible
-        }else if (networkType == 0){
+        } else if (networkType == 0){
           cp5.get(Textfield.class, "udp_ip").setVisible(false); //make sure the SD time record options menulist is visible
           cp5.get(Textfield.class, "udp_port").setVisible(false); //make sure the SD time record options menulist is visible
           cp5.get(Textfield.class, "osc_ip").setVisible(false); //make sure the SD time record options menulist is visible
@@ -2027,7 +2532,7 @@ class ControlPanel {
           cp5.get(Textfield.class, "lsl_aux").setVisible(true); //make sure the SD time record options menulist is visible
           lslOptionsBox.draw();
         }
-    
+
       } else if (eegDataSource == 1) { //when data source is from playback file
         playbackFileBox.draw();
         sdConverterBox.draw();
@@ -2046,44 +2551,26 @@ class ControlPanel {
         cp5.get(Textfield.class, "lsl_data").setVisible(false); //make sure the SD time record options menulist is visible
         cp5.get(Textfield.class, "lsl_aux").setVisible(false); //make sure the SD time record options menulist is visible
 
-        cp5Popup.get(MenuList.class, "channelList").setVisible(false); 
+        cp5Popup.get(MenuList.class, "channelList").setVisible(false);
         cp5Popup.get(MenuList.class, "pollList").setVisible(false);
       } else if (eegDataSource == 2) {
-        //make sure serial list is visible
         //set other CP5 controllers invisible
-        cp5.get(Textfield.class, "fileName").setVisible(false); //make sure the data file field is visible
-        cp5.get(MenuList.class, "serialList").setVisible(false);
-        cp5.get(MenuList.class, "sdTimes").setVisible(false);
-        cp5.get(MenuList.class, "networkList").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "udp_ip").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "udp_port").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_ip").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_port").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_address").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "lsl_data").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "lsl_aux").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5Popup.get(MenuList.class, "channelList").setVisible(false); 
-        cp5Popup.get(MenuList.class, "pollList").setVisible(false);
+        hideAllBoxes();
+      } else if (eegDataSource == DATASOURCE_GANGLION) {
+        hideAllBoxes();
+
+        bleBox.draw();
+        cp5.get(MenuList.class, "bleList").setVisible(true); //make sure the bleList menulist is visible
+
+
       } else {
         //set other CP5 controllers invisible
-        cp5.get(Textfield.class, "fileName").setVisible(false); //make sure the data file field is visible
-        cp5.get(MenuList.class, "serialList").setVisible(false);
-        cp5.get(MenuList.class, "sdTimes").setVisible(false);
-        cp5.get(MenuList.class, "networkList").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "udp_ip").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "udp_port").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_ip").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_port").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "osc_address").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "lsl_data").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5.get(Textfield.class, "lsl_aux").setVisible(false); //make sure the SD time record options menulist is visible
-        cp5Popup.get(MenuList.class, "channelList").setVisible(false); 
-        cp5Popup.get(MenuList.class, "pollList").setVisible(false);
+        hideAllBoxes();
       }
     } else {
       cp5.setVisible(false); // if isRunning is true, hide all controlP5 elements
       cp5Popup.setVisible(false);
-      cp5Serial.setVisible(false);  
+      cp5Serial.setVisible(false);
     }
 
     //draw the box that tells you to stop the system in order to edit control settings
@@ -2102,6 +2589,24 @@ class ControlPanel {
     }
   }
 
+  public void hideAllBoxes() {
+    //set other CP5 controllers invisible
+    cp5.get(Textfield.class, "fileName").setVisible(false); //make sure the data file field is visible
+    cp5.get(MenuList.class, "serialList").setVisible(false);
+    cp5.get(MenuList.class, "bleList").setVisible(false);
+    cp5.get(MenuList.class, "sdTimes").setVisible(false);
+    cp5.get(MenuList.class, "networkList").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "udp_ip").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "udp_port").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "osc_ip").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "osc_port").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "osc_address").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "lsl_data").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5.get(Textfield.class, "lsl_aux").setVisible(false); //make sure the SD time record options menulist is visible
+    cp5Popup.get(MenuList.class, "channelList").setVisible(false);
+    cp5Popup.get(MenuList.class, "pollList").setVisible(false);
+  }
+
   //mouse pressed in control panel
   public void CPmousePressed() {
     verbosePrint("CPmousePressed");
@@ -2113,16 +2618,19 @@ class ControlPanel {
 
     //only able to click buttons of control panel when system is not running
     if (systemMode != 10) {
-      if(autoconnect.isMouseHere()){
-        autoconnect.setIsActive(true);
-        autoconnect.wasPressed = true;
-      }
-      //active buttons during DATASOURCE_NORMAL
-      if (eegDataSource == 0) {
+
+      //active buttons during DATASOURCE_NORMAL_W_AUX
+      if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
+        if(autoconnect.isMouseHere()){
+          autoconnect.setIsActive(true);
+          autoconnect.wasPressed = true;
+        }
+
         if (popOut.isMouseHere()){
           popOut.setIsActive(true);
           popOut.wasPressed = true;
         }
+
         if (refreshPort.isMouseHere()) {
           refreshPort.setIsActive(true);
           refreshPort.wasPressed = true;
@@ -2146,63 +2654,63 @@ class ControlPanel {
           chanButton8.color_notPressed = autoFileName.color_notPressed; //default color of button
           chanButton16.color_notPressed = isSelected_color;
         }
-        
+
         if (getChannel.isMouseHere()){
           getChannel.setIsActive(true);
           getChannel.wasPressed = true;
         }
-        
+
         if (setChannel.isMouseHere()){
           setChannel.setIsActive(true);
           setChannel.wasPressed = true;
         }
-        
+
         if (ovrChannel.isMouseHere()){
           ovrChannel.setIsActive(true);
           ovrChannel.wasPressed = true;
         }
-        
+
         if (getPoll.isMouseHere()){
           getPoll.setIsActive(true);
           getPoll.wasPressed = true;
         }
-        
+
         if (setPoll.isMouseHere()){
           setPoll.setIsActive(true);
           setPoll.wasPressed = true;
         }
-        
+
         if (defaultBAUD.isMouseHere()){
           defaultBAUD.setIsActive(true);
           defaultBAUD.wasPressed = true;
         }
-        
+
         if (highBAUD.isMouseHere()){
           highBAUD.setIsActive(true);
           highBAUD.wasPressed = true;
         }
-        
+
         if (autoscan.isMouseHere()){
           autoscan.setIsActive(true);
           autoscan.wasPressed = true;
         }
-        
+
         if (autoconnectNoStartDefault.isMouseHere()){
           autoconnectNoStartDefault.setIsActive(true);
           autoconnectNoStartDefault.wasPressed = true;
         }
-        
+
         if (autoconnectNoStartHigh.isMouseHere()){
           autoconnectNoStartHigh.setIsActive(true);
           autoconnectNoStartHigh.wasPressed = true;
         }
-        
-       
+
+
         if (systemStatus.isMouseHere()){
           systemStatus.setIsActive(true);
           systemStatus.wasPressed = true;
         }
-        
+
       }
 
       //active buttons during DATASOURCE_PLAYBACKFILE
@@ -2217,19 +2725,29 @@ class ControlPanel {
           selectSDFile.wasPressed = true;
         }
       }
+
+      if (eegDataSource == DATASOURCE_GANGLION) {
+        // This is where we check for button presses if we are searching for BLE devices
+
+        if (refreshBLE.isMouseHere()) {
+          refreshBLE.setIsActive(true);
+          refreshBLE.wasPressed = true;
+        }
+
+      }
     }
     // output("Text File Name: " + cp5.get(Textfield.class,"fileName").getText());
   }
 
   //mouse released in control panel
   public void CPmouseReleased() {
-    verbosePrint("CPMouseReleased: CPmouseReleased start...");
+    //verbosePrint("CPMouseReleased: CPmouseReleased start...");
     if(popOut.isMouseHere() && popOut.wasPressed){
       popOut.wasPressed = false;
       popOut.setIsActive(false);
-      if(rcBox.isShowing){ 
+      if(rcBox.isShowing){
         rcBox.isShowing = false;
-        cp5Popup.get(MenuList.class, "channelList").setVisible(false); 
+        cp5Popup.get(MenuList.class, "channelList").setVisible(false);
         popOut.setString(">");
       }
       else{
@@ -2237,53 +2755,53 @@ class ControlPanel {
         popOut.setString("<");
       }
     }
-    
+
     if(getChannel.isMouseHere() && getChannel.wasPressed){
       if(board != null) get_channel( rcBox);
-      
+
       getChannel.wasPressed=false;
       getChannel.setIsActive(false);
     }
-    
+
     if (setChannel.isMouseHere() && setChannel.wasPressed){
       channelPopup.setClicked(true);
       pollPopup.setClicked(false);
       setChannel.setIsActive(false);
     }
-    
+
     if (ovrChannel.isMouseHere() && ovrChannel.wasPressed){
       channelPopup.setClicked(true);
       pollPopup.setClicked(false);
       ovrChannel.setIsActive(false);
     }
-    
-    
+
+
     if (getPoll.isMouseHere() && getPoll.wasPressed){
       get_poll(rcBox);
       getPoll.setIsActive(false);
       getPoll.wasPressed = false;
     }
-    
+
     if (setPoll.isMouseHere() && setPoll.wasPressed){
       pollPopup.setClicked(true);
       channelPopup.setClicked(false);
       setPoll.setIsActive(false);
     }
-    
+
     if (defaultBAUD.isMouseHere() && defaultBAUD.wasPressed){
       set_baud_default(rcBox,openBCI_portName);
       defaultBAUD.setIsActive(false);
       defaultBAUD.wasPressed=false;
     }
-    
+
     if (highBAUD.isMouseHere() && highBAUD.wasPressed){
       set_baud_high(rcBox,openBCI_portName);
       highBAUD.setIsActive(false);
       highBAUD.wasPressed=false;
     }
-    
+
     if(autoconnectNoStartDefault.isMouseHere() && autoconnectNoStartDefault.wasPressed){
-      
+
       if(board == null){
         try{
           board = autoconnect_return_default();
@@ -2292,54 +2810,54 @@ class ControlPanel {
         catch (Exception e){
           rcBox.print_onscreen("Error connecting to board...");
         }
-        
-        
+
+
       }
      else rcBox.print_onscreen("Board already connected!");
       autoconnectNoStartDefault.setIsActive(false);
       autoconnectNoStartDefault.wasPressed = false;
     }
-    
+
     if(autoconnectNoStartHigh.isMouseHere() && autoconnectNoStartHigh.wasPressed){
-      
+
       if(board == null){
-        
+
         try{
-          
+
           board = autoconnect_return_high();
           rcBox.print_onscreen("Successfully connected to board");
         }
         catch (Exception e2){
           rcBox.print_onscreen("Error connecting to board...");
         }
-         
+
       }
      else rcBox.print_onscreen("Board already connected!");
       autoconnectNoStartHigh.setIsActive(false);
       autoconnectNoStartHigh.wasPressed = false;
     }
-    
+
     if(autoscan.isMouseHere() && autoscan.wasPressed){
       autoscan.wasPressed = false;
       autoscan.setIsActive(false);
       scan_channels(rcBox);
-      
+
     }
-    
+
     if(autoconnect.isMouseHere() && autoconnect.wasPressed && eegDataSource != DATASOURCE_PLAYBACKFILE){
       autoconnect();
       system_init();
       autoconnect.wasPressed = false;
       autoconnect.setIsActive(false);
     }
-    
+
     if(systemStatus.isMouseHere() && systemStatus.wasPressed){
       system_status(rcBox);
       systemStatus.setIsActive(false);
       systemStatus.wasPressed = false;
     }
-    
-    
+
+
     if (initSystemButton.isMouseHere() && initSystemButton.wasPressed) {
       if(board != null) board.stop();
       //if system is not active ... initate system and flip button state
@@ -2358,6 +2876,12 @@ class ControlPanel {
         serialList.addItem(makeItem(tempPort));
       }
       serialList.updateMenu();
+    }
+
+    //open or close serial port if serial port button is pressed (left button in serial widget)
+    if (refreshBLE.isMouseHere() && refreshBLE.wasPressed) {
+      output("BLE Devices Refreshing");
+      ganglion.getBLEDevices();
     }
 
     //open or close serial port if serial port button is pressed (left button in serial widget)
@@ -2396,6 +2920,8 @@ class ControlPanel {
     //reset all buttons to false
     refreshPort.setIsActive(false);
     refreshPort.wasPressed = false;
+    refreshBLE.setIsActive(false);
+    refreshBLE.wasPressed = false;
     initSystemButton.setIsActive(false);
     initSystemButton.wasPressed = false;
     autoFileName.setIsActive(false);
@@ -2414,7 +2940,7 @@ class ControlPanel {
 public void system_init(){
   if (initSystemButton.but_txt == "START SYSTEM") {
 
-      if ((eegDataSource == DATASOURCE_NORMAL || eegDataSource == DATASOURCE_NORMAL_W_AUX) && openBCI_portName == "N/A") { //if data source == normal && if no serial port selected OR no SD setting selected
+      if (eegDataSource == DATASOURCE_NORMAL_W_AUX && openBCI_portName == "N/A") { //if data source == normal && if no serial port selected OR no SD setting selected
         output("No Serial/COM port selected. Please select your Serial/COM port and retry system initiation.");
         initSystemButton.wasPressed = false;
         initSystemButton.setIsActive(false);
@@ -2424,19 +2950,37 @@ public void system_init(){
         initSystemButton.wasPressed = false;
         initSystemButton.setIsActive(false);
         return;
+      } else if (eegDataSource == DATASOURCE_GANGLION && ganglion_portName == "N/A") {
+        output("No BLE device selected. Please select your Ganglion device and retry system initiation.");
+        initSystemButton.wasPressed = false;
+        initSystemButton.setIsActive(false);
+        return;
       } else if (eegDataSource == -1) {//if no data source selected
         output("No DATA SOURCE selected. Please select a DATA SOURCE and retry system initiation.");//tell user they must select a data source before initiating system
         initSystemButton.wasPressed = false;
         initSystemButton.setIsActive(false);
         return;
-      } else { //otherwise, initiate system!  
-        verbosePrint("ControlPanel: CPmouseReleased: init");
+      } else { //otherwise, initiate system!
+        //verbosePrint("ControlPanel: CPmouseReleased: init");
         initSystemButton.setString("STOP SYSTEM");
         //global steps to START SYSTEM
         // prepare the serial port
-        verbosePrint("ControlPanel \u2014 port is open: " + openBCI.isSerialPortOpen());
-        if (openBCI.isSerialPortOpen() == true) {
-          openBCI.closeSerialPort();
+        if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
+          verbosePrint("ControlPanel \u2014 port is open: " + openBCI.isSerialPortOpen());
+          if (openBCI.isSerialPortOpen() == true) {
+            openBCI.closeSerialPort();
+          }
+        } else { // Must be Ganglion
+          nchan = 4;
+          fftBuff = new FFT[nchan];  //reinitialize the FFT buffer
+          yLittleBuff_uV = new float[nchan][nPointsPerUpdate];
+          output("channel count set to " + str(nchan));
+          updateChannelArrays(nchan); //make sure to reinitialize the channel arrays with the right number of channels
+
+          println("ControlPanel \u2014 port is open: " + ganglion.isPortOpen());
+          if (ganglion.isPortOpen()) {
+            ganglion.disconnectBLE();
+          }
         }
 
         if (networkType == 1){
@@ -2456,7 +3000,7 @@ public void system_init(){
           }
 
 
-        fileName = cp5.get(Textfield.class, "fileName").getText(); // store the current text field value of "File Name" to be passed along to dataFiles 
+        fileName = cp5.get(Textfield.class, "fileName").getText(); // store the current text field value of "File Name" to be passed along to dataFiles
         initSystem();
       }
     }
@@ -2480,6 +3024,10 @@ public void set_channel_popup(){;
 
 class DataSourceBox {
   int x, y, w, h, padding; //size and position
+  int numItems = 4;
+  int boxHeight = 24;
+  int spacing = 43;
+
 
   CheckBox sourceCheckBox;
 
@@ -2487,16 +3035,17 @@ class DataSourceBox {
     x = _x;
     y = _y;
     w = _w;
-    h = 115;
+    h = spacing + (numItems * boxHeight);
     padding = _padding;
 
-    sourceList = new MenuList(cp5, "sourceList", w - padding*2, 72, f2);
+    sourceList = new MenuList(cp5, "sourceList", w - padding*2, numItems * boxHeight, f2);
     // sourceList.itemHeight = 28;
     // sourceList.padding = 9;
     sourceList.setPosition(x + padding, y + padding*2 + 13);
     sourceList.addItem(makeItem("LIVE (from OpenBCI)                   >"));
     sourceList.addItem(makeItem("PLAYBACK (from file)                  >"));
     sourceList.addItem(makeItem("SYNTHETIC (algorithmic)           >"));
+    sourceList.addItem(makeItem("LIVE (from Ganglion)                   >"));
     sourceList.scrollerLength = 10;
   }
 
@@ -2539,7 +3088,7 @@ class SerialBox {
     popOut = new Button(x+padding + (w-padding*4), y +5, 20,20,">",fontInfo.buttonLabel_size);
 
     serialList = new MenuList(cp5, "serialList", w - padding*2, 72, f2);
-    println(w-padding*2);
+    // println(w-padding*2);
     serialList.setPosition(x + padding, y + padding*3 + 13 + 24);
     serialPorts = Serial.list();
     for (int i = 0; i < serialPorts.length; i++) {
@@ -2571,6 +3120,58 @@ class SerialBox {
   }
 
   public void refreshSerialList() {
+  }
+};
+
+class BLEBox {
+  int x, y, w, h, padding; //size and position
+  //connect/disconnect button
+  //Refresh list button
+  //String port status;
+
+  BLEBox(int _x, int _y, int _w, int _h, int _padding) {
+    x = _x;
+    y = _y;
+    w = _w;
+    h = 171 - 24 + _padding;
+    padding = _padding;
+
+    refreshBLE = new Button (x + padding, y + padding * 4 + 13 + 71, w - padding * 2, 24, "REFRESH LIST", fontInfo.buttonLabel_size);
+    bleList = new MenuList(cp5, "bleList", w - padding * 2, 84, f2);
+    // println(w-padding*2);
+    bleList.setPosition(x + padding, y + padding * 3);
+    // Call to update the list
+    // ganglion.getBLEDevices();
+
+  }
+
+  public void update() {
+    // Quick check to see if there are just more or less devices in general
+
+  }
+
+  public void draw() {
+    pushStyle();
+    fill(boxColor);
+    stroke(boxStrokeColor);
+    strokeWeight(1);
+    rect(x, y, w, h);
+    fill(bgColor);
+    textFont(f1);
+    textAlign(LEFT, TOP);
+    text("BLE DEVICES", x + padding, y + padding);
+    popStyle();
+
+    refreshBLE.draw();
+  }
+
+  public void refreshBLEList() {
+    bleList.items.clear();
+    for (int i = 0; i < ganglion.deviceList.length; i++) {
+      String tempPort = ganglion.deviceList[i];
+      bleList.addItem(makeItem(tempPort));
+    }
+    bleList.updateMenu();
   }
 };
 
@@ -2608,10 +3209,10 @@ class DataLogBox {
       .setColorValueLabel(color(0, 0, 0))  // text color
       .setColorForeground(isSelected_color)  // border color when not selected
       .setColorActive(isSelected_color)  // border color when selected
-      .setColorCursor(color(26, 26, 26)) 
+      .setColorCursor(color(26, 26, 26))
       .setText(getDateString())
-      .align(5, 10, 20, 40) 
-      .onDoublePress(cb) 
+      .align(5, 10, 20, 40)
+      .onDoublePress(cb)
       .setAutoClear(true);
 
     //clear text field on double click
@@ -2737,7 +3338,7 @@ class SDBox {
     sdTimes.addItem(makeItem("4 hour maximum"));
     sdTimes.addItem(makeItem("12 hour maximum"));
     sdTimes.addItem(makeItem("24 hour maximum"));
-    
+
     sdTimes.activeItem = sdSetting; //added to indicate default choice (sdSetting is in OpenBCI_GUI)
   }
 
@@ -2755,7 +3356,7 @@ class SDBox {
     textAlign(LEFT, TOP);
     text("WRITE TO SD (Y/N)?", x + padding, y + padding);
     popStyle();
-  
+
     //the drawing of the sdTimes is handled earlier in ControlPanel.draw()
 
   }
@@ -2802,7 +3403,7 @@ class NetworkingBox{
     popStyle();
   }
 };
-  
+
 
 class RadioConfigBox {
   int x, y, w, h, padding; //size and position
@@ -2823,14 +3424,14 @@ class RadioConfigBox {
     ovrChannel = new Button(x + padding, y + padding*3 + 18 + 24, (w-padding*3)/2, 24, "OVERRIDE CHAN", fontInfo.buttonLabel_size);
     getPoll = new Button(x + padding + (w-padding*2)/2, y + padding*3 + 18 + 24, (w-padding*3)/2, 24, "GET POLL", fontInfo.buttonLabel_size);
     setPoll = new Button(x + padding, y + padding*4 + 18 + 24*2, (w-padding*3)/2, 24, "SET POLL", fontInfo.buttonLabel_size);
-    defaultBAUD = new Button(x + padding + (w-padding*2)/2, y + padding*4 + 18 + 24*2, (w-padding*3)/2, 24, "DEFAULT BAUD", fontInfo.buttonLabel_size);    
+    defaultBAUD = new Button(x + padding + (w-padding*2)/2, y + padding*4 + 18 + 24*2, (w-padding*3)/2, 24, "DEFAULT BAUD", fontInfo.buttonLabel_size);
     highBAUD = new Button(x + padding, y + padding*5 + 18 + 24*3, (w-padding*3)/2, 24, "HIGH BAUD", fontInfo.buttonLabel_size);
     autoscan = new Button(x + padding + (w-padding*2)/2, y + padding*5 + 18 + 24*3, (w-padding*3)/2, 24, "AUTOSCAN CHANS", fontInfo.buttonLabel_size);
     autoconnectNoStartDefault = new Button(x + padding, y + padding*6 + 18 + 24*4, (w-padding*3 )/2 , 24, "CONNECT 115200", fontInfo.buttonLabel_size);
     systemStatus = new Button(x + padding + (w-padding*2)/2, y + padding*6 + 18 + 24*4, (w-padding*3 )/2, 24, "STATUS", fontInfo.buttonLabel_size);
     autoconnectNoStartHigh = new Button(x + padding, y + padding*7 + 18 + 24*5, (w-padding*3 )/2, 24, "CONNECT 230400", fontInfo.buttonLabel_size);
 
-    
+
   }
   public void update() {
   }
@@ -2858,11 +3459,11 @@ class RadioConfigBox {
     autoconnectNoStartHigh.draw();
     systemStatus.draw();
     this.print_onscreen(last_message);
-  
+
     //the drawing of the sdTimes is handled earlier in ControlPanel.draw()
 
   }
-  
+
   public void print_onscreen(String localstring){
     textAlign(LEFT);
     fill(0);
@@ -2871,9 +3472,9 @@ class RadioConfigBox {
     text(localstring, x + padding + 10, y + (padding*8) + 18 + (24*6) + 15, (w-padding*3 ), 135 - 24 - padding -15);
     this.last_message = localstring;
   }
-  
+
   public void print_lastmessage(){
-  
+
     fill(0);
     rect(x + padding, y + (padding*7) + 18 + (24*5), (w-padding*3 + 5), 135);
     fill(255);
@@ -2885,14 +3486,14 @@ class RadioConfigBox {
 
 class UDPOptionsBox {
   int x, y, w, h, padding; //size and position
-  
+
   UDPOptionsBox(int _x, int _y, int _w, int _h, int _padding){
     x = _x;
     y = _y;
     w = _w;
     h = _h;
     padding = _padding;
-    
+
     cp5.addTextfield("udp_ip")
       .setPosition(x + 60,y + 50)
       .setCaptionLabel("")
@@ -2904,10 +3505,10 @@ class UDPOptionsBox {
       .setColorValueLabel(color(0,0,0))  // text color
       .setColorForeground(isSelected_color)  // border color when not selected
       .setColorActive(isSelected_color)  // border color when selected
-      .setColorCursor(color(26,26,26)) 
+      .setColorCursor(color(26,26,26))
       .setText("localhost")
-      .align(5, 10, 20, 40) 
-      .onDoublePress(cb) 
+      .align(5, 10, 20, 40)
+      .onDoublePress(cb)
       .setVisible(false)
       .setAutoClear(true)
       ;
@@ -2923,10 +3524,10 @@ class UDPOptionsBox {
       .setColorValueLabel(color(0,0,0))  // text color
       .setColorForeground(isSelected_color)  // border color when not selected
       .setColorActive(isSelected_color)  // border color when selected
-      .setColorCursor(color(26,26,26)) 
+      .setColorCursor(color(26,26,26))
       .setText("12345")
-      .align(5, 10, 20, 40) 
-      .onDoublePress(cb) 
+      .align(5, 10, 20, 40)
+      .onDoublePress(cb)
       .setVisible(false)
       .setAutoClear(true)
       ;
@@ -2961,14 +3562,14 @@ class UDPOptionsBox {
 
 class OSCOptionsBox{
   int x, y, w, h, padding; //size and position
-  
+
   OSCOptionsBox(int _x, int _y, int _w, int _h, int _padding){
     x = _x;
     y = _y;
     w = _w;
     h = _h;
     padding = _padding;
-    
+
     cp5.addTextfield("osc_ip")
       .setPosition(x + 80,y + 35)
       .setCaptionLabel("")
@@ -2980,10 +3581,10 @@ class OSCOptionsBox{
       .setColorValueLabel(color(0,0,0))  // text color
       .setColorForeground(isSelected_color)  // border color when not selected
       .setColorActive(isSelected_color)  // border color when selected
-      .setColorCursor(color(26,26,26)) 
+      .setColorCursor(color(26,26,26))
       .setText("localhost")
-      .align(5, 10, 20, 40) 
-      .onDoublePress(cb) 
+      .align(5, 10, 20, 40)
+      .onDoublePress(cb)
       .setVisible(false)
       .setAutoClear(true)
       ;
@@ -2998,10 +3599,10 @@ class OSCOptionsBox{
       .setColorValueLabel(color(0,0,0))  // text color
       .setColorForeground(isSelected_color)  // border color when not selected
       .setColorActive(isSelected_color)  // border color when selected
-      .setColorCursor(color(26,26,26)) 
+      .setColorCursor(color(26,26,26))
       .setText("12345")
-      .align(5, 10, 20, 40) 
-      .onDoublePress(cb) 
+      .align(5, 10, 20, 40)
+      .onDoublePress(cb)
       .setVisible(false)
       .setAutoClear(true)
       ;
@@ -3016,10 +3617,10 @@ class OSCOptionsBox{
       .setColorValueLabel(color(0,0,0))  // text color
       .setColorForeground(isSelected_color)  // border color when not selected
       .setColorActive(isSelected_color)  // border color when selected
-      .setColorCursor(color(26,26,26)) 
+      .setColorCursor(color(26,26,26))
       .setText("/openbci")
-      .align(5, 10, 20, 40) 
-      .onDoublePress(cb) 
+      .align(5, 10, 20, 40)
+      .onDoublePress(cb)
       .setVisible(false)
       .setAutoClear(true)
       ;
@@ -3055,14 +3656,14 @@ class OSCOptionsBox{
 
 class LSLOptionsBox {
   int x, y, w, h, padding; //size and position
-  
+
   LSLOptionsBox(int _x, int _y, int _w, int _h, int _padding){
     x = _x;
     y = _y;
     w = _w;
     h = _h;
     padding = _padding;
-    
+
     cp5.addTextfield("lsl_data")
       .setPosition(x + 115,y + 50)
       .setCaptionLabel("")
@@ -3074,10 +3675,10 @@ class LSLOptionsBox {
       .setColorValueLabel(color(0,0,0))  // text color
       .setColorForeground(isSelected_color)  // border color when not selected
       .setColorActive(isSelected_color)  // border color when selected
-      .setColorCursor(color(26,26,26)) 
+      .setColorCursor(color(26,26,26))
       .setText("openbci_data")
-      .align(5, 10, 20, 40) 
-      .onDoublePress(cb) 
+      .align(5, 10, 20, 40)
+      .onDoublePress(cb)
       .setVisible(false)
       .setAutoClear(true)
       ;
@@ -3093,10 +3694,10 @@ class LSLOptionsBox {
       .setColorValueLabel(color(0,0,0))  // text color
       .setColorForeground(isSelected_color)  // border color when not selected
       .setColorActive(isSelected_color)  // border color when selected
-      .setColorCursor(color(26,26,26)) 
+      .setColorCursor(color(26,26,26))
       .setText("openbci_aux")
-      .align(5, 10, 20, 40) 
-      .onDoublePress(cb) 
+      .align(5, 10, 20, 40)
+      .onDoublePress(cb)
       .setVisible(false)
       .setAutoClear(true)
       ;
@@ -3179,7 +3780,7 @@ class ChannelPopup {
 
     channelList = new MenuList(cp5Popup, "channelList", w - padding*2, 140, f2);
     channelList.setPosition(x+padding, y+padding*3);
-    
+
     for (int i = 1; i < 26; i++) {
       channelList.addItem(makeItem(String.valueOf(i)));
     }
@@ -3205,9 +3806,9 @@ class ChannelPopup {
     refreshPort.draw();
     autoconnect.draw();
   }
-  
+
   public void setClicked(boolean click){this.clicked = click; }
-  
+
   public boolean wasClicked(){return this.clicked;}
 
 };
@@ -3230,7 +3831,7 @@ class PollPopup {
 
     pollList = new MenuList(cp5Popup, "pollList", w - padding*2, 140, f2);
     pollList.setPosition(x+padding, y+padding*3);
-    
+
     for (int i = 0; i < 256; i++) {
       pollList.addItem(makeItem(String.valueOf(i)));
     }
@@ -3256,9 +3857,9 @@ class PollPopup {
     refreshPort.draw();
     autoconnect.draw();
   }
-  
+
   public void setClicked(boolean click){this.clicked = click; }
-  
+
   public boolean wasClicked(){return this.clicked;}
 
 };
@@ -3340,7 +3941,7 @@ public class MenuList extends controlP5.Controller {
   boolean drawHand;
   int hoverItem = -1;
   int activeItem = -1;
-  PFont menuFont = f2; 
+  PFont menuFont = f2;
   int padding = 7;
 
 
@@ -3376,7 +3977,7 @@ public class MenuList extends controlP5.Controller {
             menu.rect(getWidth()-scrollerWidth-2, ty, scrollerWidth, scrollerLength );
           }
           menu.endDraw();
-        } 
+        }
         else {
           if(drawHand){
             drawHand = false;
@@ -3403,12 +4004,12 @@ public class MenuList extends controlP5.Controller {
     menu.pushMatrix();
     menu.translate( 0, pos );
     menu.pushMatrix();
-    
+
     int i0;
     if((itemHeight * items.size()) != 0){
       i0 = PApplet.max( 0, PApplet.parseInt(map(-pos, 0, itemHeight * items.size(), 0, items.size())));
     } else{
-      i0 = 0; 
+      i0 = 0;
     }
     int range = ceil((PApplet.parseFloat(getHeight())/PApplet.parseFloat(itemHeight))+1);
     int i1 = PApplet.min( items.size(), i0 + range );
@@ -3441,7 +4042,7 @@ public class MenuList extends controlP5.Controller {
     updateMenu = abs(npos-pos)>0.01f ? true:false;
   }
 
-  /* when detecting a click, check if the click happend to the far right, if yes, scroll to that position, 
+  /* when detecting a click, check if the click happend to the far right, if yes, scroll to that position,
    * otherwise do whatever this item of the list is supposed to do.
    */
   public void onClick() {
@@ -3476,7 +4077,7 @@ public class MenuList extends controlP5.Controller {
       npos += getPointer().dy() * 2;
       updateMenu = true;
     }
-  } 
+  }
 
   public void onScroll(int n) {
     npos += ( n * 4 );
@@ -3528,7 +4129,11 @@ public void openNewLogFile(String _fileName) {
   }
 
   //open the new file
-  fileoutput = new OutputFile_rawtxt(openBCI.get_fs_Hz(), _fileName);
+  if (eegDataSource == DATASOURCE_GANGLION) {
+    fileoutput = new OutputFile_rawtxt(ganglion.get_fs_Hz(), _fileName);
+  } else {
+    fileoutput = new OutputFile_rawtxt(openBCI.get_fs_Hz(), _fileName);
+  }
   output_fname = fileoutput.fname;
   println("openBCI: openNewLogFile: opened output file: " + output_fname);
   output("openBCI: openNewLogFile: opened output file: " + output_fname);
@@ -3562,7 +4167,7 @@ public String getDateString() {
   if (month() < 10) fname=fname+"0";
   fname = fname + month() + "-";
   if (day() < 10) fname = fname + "0";
-  fname = fname + day(); 
+  fname = fname + day();
 
   fname = fname + "_";
   if (hour() < 10) fname = fname + "0";
@@ -3613,7 +4218,7 @@ public class OutputFile_rawtxt {
     if (month() < 10) fname=fname+"0";
     fname = fname + month() + "-";
     if (day() < 10) fname = fname + "0";
-    fname = fname + day(); 
+    fname = fname + day();
 
     //add hour minute sec to the file name
     fname = fname + "_";
@@ -3632,7 +4237,7 @@ public class OutputFile_rawtxt {
 
     //add the header
     writeHeader(fs_Hz);
-    
+
     //init the counter
     rowsWritten = 0;
   }
@@ -3660,10 +4265,10 @@ public class OutputFile_rawtxt {
 
 
   public void writeRawData_dataPacket(DataPacket_ADS1299 data, float scale_to_uV, float scale_for_aux) {
-    
+
     //get current date time with Date()
     Date date = new Date();
-     
+
     if (output != null) {
       output.print(Integer.toString(data.sampleIndex));
       writeValues(data.values,scale_to_uV);
@@ -3673,8 +4278,8 @@ public class OutputFile_rawtxt {
       //output.flush();
     }
   }
-  
-  private void writeValues(int[] values, float scale_fac) {          
+
+  private void writeValues(int[] values, float scale_fac) {
     int nVal = values.length;
     for (int Ival = 0; Ival < nVal; Ival++) {
       output.print(", ");
@@ -3702,7 +4307,7 @@ public class OutputFile_rawtxt {
 //
 // Usage: Only invoke this object when you want to read in a data
 //    file in CSV format.  Read it in at the time of creation via
-//    
+//
 //    String fname = "myfile.csv";
 //    TableCSV myTable = new TableCSV(fname);
 //
@@ -3737,11 +4342,11 @@ class Table_CSV extends Table {
           setRowCount(row << 1);
         }
         if (row == 0 && header) {
-          setColumnTitles(tsv ? PApplet.split(line, '\t') : splitLineCSV(line));
+          setColumnTitles(tsv ? PApplet.split(line, '\t') : split(line,','));
           header = false;
-        } 
+        }
         else {
-          setRow(row, tsv ? PApplet.split(line, '\t') : splitLineCSV(line));
+          setRow(row, tsv ? PApplet.split(line, '\t') : split(line,','));
           row++;
         }
 
@@ -3759,13 +4364,13 @@ class Table_CSV extends Table {
           try {
             // Sleep this thread so that the GC can catch up
             Thread.sleep(10);
-          } 
+          }
           catch (InterruptedException e) {
             e.printStackTrace();
           }
         }
       }
-    } 
+    }
     catch (Exception e) {
       throw new RuntimeException("Error reading table on line " + row, e);
     }
@@ -3778,7 +4383,7 @@ class Table_CSV extends Table {
 
 //////////////////////////////////
 //
-//    This collection of functions/methods - convertSDFile, createPlaybackFileFromSD, & sdFileSelected - contains code 
+//    This collection of functions/methods - convertSDFile, createPlaybackFileFromSD, & sdFileSelected - contains code
 //    used to convert HEX files (stored by OpenBCI on the local SD) into text files that can be used for PLAYBACK mode.
 //    Created: Conor Russomanno - 10/22/14 (based on code written by Joel Murphy summer 2014)
 //
@@ -3800,7 +4405,7 @@ public void convertSDFile() {
   println("");
   try {
     dataLine = dataReader.readLine();
-  } 
+  }
   catch (IOException e) {
     e.printStackTrace();
     dataLine = null;
@@ -3810,7 +4415,7 @@ public void convertSDFile() {
     // Stop reading because of an error or file is empty
     thisTime = millis() - thatTime;
     controlPanel.convertingSD = false;
-    println("nothing left in file"); 
+    println("nothing left in file");
     println("SD file conversion took "+thisTime+" mS");
     dataWriter.flush();
     dataWriter.close();
@@ -3826,7 +4431,7 @@ public void convertSDFile() {
       for (int i=0; i<hexNums.length; i++) {
         h = hexNums[i];
         if (i > 0) {
-          if (h.charAt(0) > '7') {  // if the number is negative 
+          if (h.charAt(0) > '7') {  // if the number is negative
             h = "FF" + hexNums[i];   // keep it negative
           } else {                  // if the number is positive
             h = "00" + hexNums[i];   // keep it positive
@@ -3867,42 +4472,53 @@ public void convertSDFile() {
 //------------------------------------------------------------------------
 //                       Global Variables & Instances
 //------------------------------------------------------------------------
+ //for FFT
 
 DataProcessing dataProcessing;
 String curTimestamp;
 boolean hasRepeated = false;
 HashMap<String,float[][]> processed_file;
+HashMap<Integer,String> index_of_times;
+HashMap<String,Integer> index_of_times_rev;
 
 //------------------------------------------------------------------------
 //                       Global Functions
 //------------------------------------------------------------------------
 
 //called from systemUpdate when mode=10 and isRunning = true
-public void process_input_file() throws Exception{
+public void process_input_file() throws Exception {
   processed_file = new HashMap<String, float[][]>();
+  index_of_times = new HashMap<Integer, String>();
+  index_of_times_rev = new HashMap<String, Integer>();
   float localLittleBuff[][] = new float[nchan][nPointsPerUpdate];
-  
-  try{
-    while(!hasRepeated){
+
+  try {
+    while (!hasRepeated) {
       currentTableRowIndex=getPlaybackDataFromTable(playbackData_table, currentTableRowIndex, openBCI.get_scale_fac_uVolts_per_count(), dataPacketBuff[lastReadDataPacketInd]);
-    
+
       for (int Ichan=0; Ichan < nchan; Ichan++) {
         //scale the data into engineering units..."microvolts"
         localLittleBuff[Ichan][pointCounter] = dataPacketBuff[lastReadDataPacketInd].values[Ichan]* openBCI.get_scale_fac_uVolts_per_count();
       }
+      processed_file.put(curTimestamp, localLittleBuff);
+      index_of_times.put(indices,curTimestamp);
+      index_of_times_rev.put(curTimestamp,indices);
+      indices++;
     }
   }
-  catch (Exception e){throw new Exception();}
-  
+  catch (Exception e) {
+    throw new Exception();
+  }
+
   println("Finished filling hashmap");
   has_processed = true;
 }
 
 
-
+/*************************/
 public int getDataIfAvailable(int pointCounter) {
 
-  if ( (eegDataSource == DATASOURCE_NORMAL) || (eegDataSource == DATASOURCE_NORMAL_W_AUX) ) {
+  if (eegDataSource == DATASOURCE_NORMAL_W_AUX) {
     //get data from serial port as it streams in
     //next, gather any new data into the "little buffer"
     while ( (curDataPacketInd != lastReadDataPacketInd) && (pointCounter < nPointsPerUpdate)) {
@@ -3911,9 +4527,20 @@ public int getDataIfAvailable(int pointCounter) {
         //scale the data into engineering units ("microvolts") and save to the "little buffer"
         yLittleBuff_uV[Ichan][pointCounter] = dataPacketBuff[lastReadDataPacketInd].values[Ichan] * openBCI.get_scale_fac_uVolts_per_count();
       }
+      for (int auxChan=0; auxChan < 3; auxChan++) auxBuff[auxChan][pointCounter] = dataPacketBuff[lastReadDataPacketInd].auxValues[auxChan];
       pointCounter++; //increment counter for "little buffer"
     }
-   
+  } else if (eegDataSource == DATASOURCE_GANGLION) {
+    //get data from ble as it streams in
+    //next, gather any new data into the "little buffer"
+    while ( (curDataPacketInd != lastReadDataPacketInd) && (pointCounter < nPointsPerUpdate)) {
+      lastReadDataPacketInd = (lastReadDataPacketInd + 1) % dataPacketBuff.length;  //increment to read the next packet
+      for (int Ichan=0; Ichan < nchan; Ichan++) {   //loop over each cahnnel
+        //scale the data into engineering units ("microvolts") and save to the "little buffer"
+        yLittleBuff_uV[Ichan][pointCounter] = dataPacketBuff[lastReadDataPacketInd].values[Ichan] * ganglion.get_scale_fac_uVolts_per_count();
+      }
+      pointCounter++; //increment counter for "little buffer"
+    }
   } else {
     // make or load data to simulate real time
 
@@ -3921,7 +4548,7 @@ public int getDataIfAvailable(int pointCounter) {
     int current_millis = millis();
     if (current_millis >= nextPlayback_millis) {
       //prepare for next time
-      int increment_millis = PApplet.parseInt(round(PApplet.parseFloat(nPointsPerUpdate)*1000.f/openBCI.get_fs_Hz())/playback_speed_fac);
+      int increment_millis = PApplet.parseInt(round(PApplet.parseFloat(nPointsPerUpdate)*1000.f/get_fs_Hz_safe())/playback_speed_fac);
       if (nextPlayback_millis < 0) nextPlayback_millis = current_millis;
       nextPlayback_millis += increment_millis;
 
@@ -3932,7 +4559,7 @@ public int getDataIfAvailable(int pointCounter) {
         dataPacketBuff[lastReadDataPacketInd].sampleIndex++;
         switch (eegDataSource) {
         case DATASOURCE_SYNTHETIC: //use synthetic data (for GUI debugging)
-          synthesizeData(nchan, openBCI.get_fs_Hz(), openBCI.get_scale_fac_uVolts_per_count(), dataPacketBuff[lastReadDataPacketInd]);
+          synthesizeData(nchan, get_fs_Hz_safe(), openBCI.get_scale_fac_uVolts_per_count(), dataPacketBuff[lastReadDataPacketInd]);
           break;
         case DATASOURCE_PLAYBACKFILE:
           currentTableRowIndex=getPlaybackDataFromTable(playbackData_table, currentTableRowIndex, openBCI.get_scale_fac_uVolts_per_count(), dataPacketBuff[lastReadDataPacketInd]);
@@ -3945,7 +4572,7 @@ public int getDataIfAvailable(int pointCounter) {
           //scale the data into engineering units..."microvolts"
           yLittleBuff_uV[Ichan][pointCounter] = dataPacketBuff[lastReadDataPacketInd].values[Ichan]* openBCI.get_scale_fac_uVolts_per_count();
         }
-        
+
         pointCounter++;
       } //close the loop over data points
       //if (eegDataSource==DATASOURCE_PLAYBACKFILE) println("OpenBCI_GUI: getDataIfAvailable: currentTableRowIndex = " + currentTableRowIndex);
@@ -3969,13 +4596,8 @@ public void processNewData() {
   avgBitRate.addValue(inst_byteRate_perSec);
   byteRate_perSec = (int)avgBitRate.calcMean();
 
-  //prepare to update the data buffers
-  float foo_val;
-
-  //println("PPP" + fftBuff[0].specSize());
-  float prevFFTdata[] = new float[fftBuff[0].specSize()];
-
-  double foo;
+  ////prepare to update the data buffers
+  //float foo_val;
 
   //update the data buffers
   for (int Ichan=0; Ichan < nchan; Ichan++) {
@@ -3989,55 +4611,6 @@ public void processNewData() {
 
   //if you want to, re-reference the montage to make it be a mean-head reference
   if (false) rereferenceTheMontage(dataBuffY_filtY_uV);
-
-  //update the FFT (frequency spectrum)
-  for (int Ichan=0; Ichan < nchan; Ichan++) {
-
-    //copy the previous FFT data...enables us to apply some smoothing to the FFT data
-    for (int I=0; I < fftBuff[Ichan].specSize(); I++) prevFFTdata[I] = fftBuff[Ichan].getBand(I); //copy the old spectrum values
-
-    //prepare the data for the new FFT
-    float[] fooData_raw = dataBuffY_uV[Ichan];  //use the raw data for the FFT
-    fooData_raw = Arrays.copyOfRange(fooData_raw, fooData_raw.length-Nfft, fooData_raw.length);   //trim to grab just the most recent block of data
-    float meanData = mean(fooData_raw);  //compute the mean
-    for (int I=0; I < fooData_raw.length; I++) fooData_raw[I] -= meanData; //remove the mean (for a better looking FFT
-
-    //compute the FFT
-    fftBuff[Ichan].forward(fooData_raw); //compute FFT on this channel of data
-
-    //convert to uV_per_bin...still need to confirm the accuracy of this code.
-    //Do we need to account for the power lost in the windowing function?   CHIP  2014-10-24
-    //single sided FFT
-    for (int I=0; I < fftBuff[Ichan].specSize(); I++) {  //loop over each FFT bin
-      fftBuff[Ichan].setBand(I, (float)(fftBuff[Ichan].getBand(I) / fftBuff[Ichan].timeSize()));
-    }
-    //DC & Nyquist (i=0 & i=N/2) remain the same, others multiply by two. 
-    for (int I=1; I < fftBuff[Ichan].specSize()-1; I++) {  //loop over each FFT bin
-      fftBuff[Ichan].setBand(I, (float)(fftBuff[Ichan].getBand(I) * 2));
-    }
-
-    //average the FFT with previous FFT data so that it makes it smoother in time
-    double min_val = 0.01d;
-    for (int I=0; I < fftBuff[Ichan].specSize(); I++) {   //loop over each fft bin
-      if (prevFFTdata[I] < min_val) prevFFTdata[I] = (float)min_val; //make sure we're not too small for the log calls
-      foo = fftBuff[Ichan].getBand(I);
-      if (foo < min_val) foo = min_val; //make sure this value isn't too small
-
-      if (true) {
-        //smooth in dB power space
-        foo =   (1.0d-smoothFac[smoothFac_ind]) * java.lang.Math.log(java.lang.Math.pow(foo, 2));
-        foo += smoothFac[smoothFac_ind] * java.lang.Math.log(java.lang.Math.pow((double)prevFFTdata[I], 2));
-        foo = java.lang.Math.sqrt(java.lang.Math.exp(foo)); //average in dB space
-      } else {
-        //smooth (average) in linear power space
-        foo =   (1.0d-smoothFac[smoothFac_ind]) * java.lang.Math.pow(foo, 2);
-        foo+= smoothFac[smoothFac_ind] * java.lang.Math.pow((double)prevFFTdata[I], 2);
-        // take sqrt to be back into uV_rtHz
-        foo = java.lang.Math.sqrt(foo);
-      }
-      fftBuff[Ichan].setBand(I, (float)foo); //put the smoothed data back into the fftBuff data holder for use by everyone else
-    } //end loop over FFT bins
-  } //end the loop over channels.
 
   //apply additional processing for the time-domain montage plot (ie, filtering)
   dataProcessing.process(yLittleBuff_uV, dataBuffY_uV, dataBuffY_filtY_uV, fftBuff);
@@ -4127,6 +4700,7 @@ public void prepareData(float[] dataBuffX, float[][] dataBuffY_uV, float fs_Hz) 
   }
 }
 
+
 public void initializeFFTObjects(FFT[] fftBuff, float[][] dataBuffY_uV, int N, float fs_Hz) {
 
   float[] fooData;
@@ -4136,11 +4710,16 @@ public void initializeFFTObjects(FFT[] fftBuff, float[][] dataBuffY_uV, int N, f
     fftBuff[Ichan].window(FFT.HAMMING);
 
     //do the FFT on the initial data
-    fooData = dataBuffY_uV[Ichan];
+    if (isFFTFiltered == true) {
+      fooData = dataBuffY_filtY_uV[Ichan];  //use the filtered data for the FFT
+    } else {
+      fooData = dataBuffY_uV[Ichan];  //use the raw data for the FFT
+    }
     fooData = Arrays.copyOfRange(fooData, fooData.length-Nfft, fooData.length);
     fftBuff[Ichan].forward(fooData); //compute FFT on this channel of data
   }
 }
+
 
 public int getPlaybackDataFromTable(Table datatable, int currentTableRowIndex, float scale_fac_uVolts_per_count, DataPacket_ADS1299 curDataPacket) {
   float val_uV = 0.0f;
@@ -4169,18 +4748,20 @@ public int getPlaybackDataFromTable(Table datatable, int currentTableRowIndex, f
       //put into data structure
       curDataPacket.values[Ichan] = (int) (0.5f+ val_uV / scale_fac_uVolts_per_count); //convert to counts, the 0.5 is to ensure rounding
     }
-    if(!isOldData) curTimestamp = row.getString(nchan+3);
-    
+    if (!isOldData) curTimestamp = row.getString(nchan+3);
+
     //int localnchan = nchan;
-    
-    
-    //try{
-    //  while(true){
-    //    println("VALUE: " + row.getString(localnchan));
-    //    localnchan++;
-    //  }
-    //}
-    //catch (Exception e){ println("DONE WITH THIS TIME. INDEX: " + --localnchan);}
+
+    if(!isRunning){
+      try{
+        if(!isOldData) row.getString(nchan+4);
+        else row.getString(nchan+3);
+
+        nchan = 16;
+      }
+      catch (ArrayIndexOutOfBoundsException e){ println("8 Channel");}
+    }
+
   }
   return currentTableRowIndex;
 }
@@ -4211,10 +4792,12 @@ class DataProcessing {
 
     //check to make sure the sample rate is acceptable and then define the filters
     if (abs(fs_Hz-250.0f) < 1.0f) {
-      defineFilters();
+      defineFilters(0);
+    } else if (abs(fs_Hz-200.0f) < 1.0f) {
+      defineFilters(1);
     } else {
-      println("EEG_Processing: *** ERROR *** Filters can currently only work at 250 Hz");
-      defineFilters();  //define the filters anyway just so that the code doesn't bomb
+      println("EEG_Processing: *** ERROR *** Filters can currently only work at 250 Hz or 200 Hz");
+      defineFilters(0);  //define the filters anyway just so that the code doesn't bomb
     }
   }
 
@@ -4223,100 +4806,200 @@ class DataProcessing {
   };
 
   //define filters...assumes sample rate of 250 Hz !!!!!
-  private void defineFilters() {
+  private void defineFilters(int _mode) {
+    int mode = _mode; // 0 means classic OpenBCI board, 1 means ganglion
     int n_filt;
     double[] b, a, b2, a2;
     String filt_txt, filt_txt2;
     String short_txt, short_txt2;
 
-    //loop over all of the pre-defined filter types
-    n_filt = filtCoeff_notch.length;
-    for (int Ifilt=0; Ifilt < n_filt; Ifilt++) {
-      switch (Ifilt) {
-      case 0:
-        //60 Hz notch filter, assumed fs = 250 Hz.  2nd Order Butterworth: b, a = signal.butter(2,[59.0 61.0]/(fs_Hz / 2.0), 'bandstop')
-        b2 = new double[] { 9.650809863447347e-001f, -2.424683201757643e-001f, 1.945391494128786e+000f, -2.424683201757643e-001f, 9.650809863447347e-001f };
-        a2 = new double[] { 1.000000000000000e+000f, -2.467782611297853e-001f, 1.944171784691352e+000f, -2.381583792217435e-001f, 9.313816821269039e-001f  };
-        filtCoeff_notch[Ifilt] =  new FilterConstants(b2, a2, "Notch 60Hz", "60Hz");
-        break;
-      case 1:
-        //50 Hz notch filter, assumed fs = 250 Hz.  2nd Order Butterworth: b, a = signal.butter(2,[49.0 51.0]/(fs_Hz / 2.0), 'bandstop')
-        b2 = new double[] { 0.96508099f, -1.19328255f, 2.29902305f, -1.19328255f, 0.96508099f };
-        a2 = new double[] { 1.0f, -1.21449348f, 2.29780334f, -1.17207163f, 0.93138168f };
-        filtCoeff_notch[Ifilt] =  new FilterConstants(b2, a2, "Notch 50Hz", "50Hz");
-        break;
-      case 2:
-        //no notch filter
-        b2 = new double[] { 1.0f };
-        a2 = new double[] { 1.0f };
-        filtCoeff_notch[Ifilt] =  new FilterConstants(b2, a2, "No Notch", "None");
-        break;
-      }
-    } // end loop over notch filters
+    switch(mode) {
+      // classic OpenBCI board, sampling rate 250 Hz
+    case 0:
+      //loop over all of the pre-defined filter types
+      n_filt = filtCoeff_notch.length;
+      for (int Ifilt=0; Ifilt < n_filt; Ifilt++) {
+        switch (Ifilt) {
+        case 0:
+          //60 Hz notch filter, assumed fs = 250 Hz.  2nd Order Butterworth: b, a = signal.butter(2,[59.0 61.0]/(fs_Hz / 2.0), 'bandstop')
+          b2 = new double[] { 9.650809863447347e-001f, -2.424683201757643e-001f, 1.945391494128786e+000f, -2.424683201757643e-001f, 9.650809863447347e-001f };
+          a2 = new double[] { 1.000000000000000e+000f, -2.467782611297853e-001f, 1.944171784691352e+000f, -2.381583792217435e-001f, 9.313816821269039e-001f  };
+          filtCoeff_notch[Ifilt] =  new FilterConstants(b2, a2, "Notch 60Hz", "60Hz");
+          break;
+        case 1:
+          //50 Hz notch filter, assumed fs = 250 Hz.  2nd Order Butterworth: b, a = signal.butter(2,[49.0 51.0]/(fs_Hz / 2.0), 'bandstop')
+          b2 = new double[] { 0.96508099f, -1.19328255f, 2.29902305f, -1.19328255f, 0.96508099f };
+          a2 = new double[] { 1.0f, -1.21449348f, 2.29780334f, -1.17207163f, 0.93138168f };
+          filtCoeff_notch[Ifilt] =  new FilterConstants(b2, a2, "Notch 50Hz", "50Hz");
+          break;
+        case 2:
+          //no notch filter
+          b2 = new double[] { 1.0f };
+          a2 = new double[] { 1.0f };
+          filtCoeff_notch[Ifilt] =  new FilterConstants(b2, a2, "No Notch", "None");
+          break;
+        }
+      } // end loop over notch filters
 
-    n_filt = filtCoeff_bp.length;
-    for (int Ifilt=0; Ifilt<n_filt; Ifilt++) {
-      //define bandpass filter
-      switch (Ifilt) {
-      case 0:
-        //butter(2,[1 50]/(250/2));  %bandpass filter
-        b = new double[] {
-          2.001387256580675e-001f, 0.0f, -4.002774513161350e-001f, 0.0f, 2.001387256580675e-001f
-        };
-        a = new double[] {
-          1.0f, -2.355934631131582e+000f, 1.941257088655214e+000f, -7.847063755334187e-001f, 1.999076052968340e-001f
-        };
-        filt_txt = "Bandpass 1-50Hz";
-        short_txt = "1-50 Hz";
-        break;
-      case 1:
-        //butter(2,[7 13]/(250/2));
-        b = new double[] {
-          5.129268366104263e-003f, 0.0f, -1.025853673220853e-002f, 0.0f, 5.129268366104263e-003f
-        };
-        a = new double[] {
-          1.0f, -3.678895469764040e+000f, 5.179700413522124e+000f, -3.305801890016702e+000f, 8.079495914209149e-001f
-        };
-        filt_txt = "Bandpass 7-13Hz";
-        short_txt = "7-13 Hz";
-        break;
-      case 2:
-        //[b,a]=butter(2,[15 50]/(250/2)); %matlab command
-        b = new double[] {
-          1.173510367246093e-001f, 0.0f, -2.347020734492186e-001f, 0.0f, 1.173510367246093e-001f
-        };
-        a = new double[] {
-          1.0f, -2.137430180172061e+000f, 2.038578008108517e+000f, -1.070144399200925e+000f, 2.946365275879138e-001f
-        };
-        filt_txt = "Bandpass 15-50Hz";
-        short_txt = "15-50 Hz";
-        break;
-      case 3:
-        //[b,a]=butter(2,[5 50]/(250/2)); %matlab command
-        b = new double[] {
-          1.750876436721012e-001f, 0.0f, -3.501752873442023e-001f, 0.0f, 1.750876436721012e-001f
-        };
-        a = new double[] {
-          1.0f, -2.299055356038497e+000f, 1.967497759984450e+000f, -8.748055564494800e-001f, 2.196539839136946e-001f
-        };
-        filt_txt = "Bandpass 5-50Hz";
-        short_txt = "5-50 Hz";
-        break;
-      default:
-        //no filtering
-        b = new double[] {
-          1.0f
-        };
-        a = new double[] {
-          1.0f
-        };
-        filt_txt = "No BP Filter";
-        short_txt = "No Filter";
-      }  //end switch block
+      n_filt = filtCoeff_bp.length;
+      for (int Ifilt=0; Ifilt<n_filt; Ifilt++) {
+        //define bandpass filter
+        switch (Ifilt) {
+        case 0:
+          //butter(2,[1 50]/(250/2));  %bandpass filter
+          b = new double[] {
+            2.001387256580675e-001f, 0.0f, -4.002774513161350e-001f, 0.0f, 2.001387256580675e-001f
+          };
+          a = new double[] {
+            1.0f, -2.355934631131582e+000f, 1.941257088655214e+000f, -7.847063755334187e-001f, 1.999076052968340e-001f
+          };
+          filt_txt = "Bandpass 1-50Hz";
+          short_txt = "1-50 Hz";
+          break;
+        case 1:
+          //butter(2,[7 13]/(250/2));
+          b = new double[] {
+            5.129268366104263e-003f, 0.0f, -1.025853673220853e-002f, 0.0f, 5.129268366104263e-003f
+          };
+          a = new double[] {
+            1.0f, -3.678895469764040e+000f, 5.179700413522124e+000f, -3.305801890016702e+000f, 8.079495914209149e-001f
+          };
+          filt_txt = "Bandpass 7-13Hz";
+          short_txt = "7-13 Hz";
+          break;
+        case 2:
+          //[b,a]=butter(2,[15 50]/(250/2)); %matlab command
+          b = new double[] {
+            1.173510367246093e-001f, 0.0f, -2.347020734492186e-001f, 0.0f, 1.173510367246093e-001f
+          };
+          a = new double[] {
+            1.0f, -2.137430180172061e+000f, 2.038578008108517e+000f, -1.070144399200925e+000f, 2.946365275879138e-001f
+          };
+          filt_txt = "Bandpass 15-50Hz";
+          short_txt = "15-50 Hz";
+          break;
+        case 3:
+          //[b,a]=butter(2,[5 50]/(250/2)); %matlab command
+          b = new double[] {
+            1.750876436721012e-001f, 0.0f, -3.501752873442023e-001f, 0.0f, 1.750876436721012e-001f
+          };
+          a = new double[] {
+            1.0f, -2.299055356038497e+000f, 1.967497759984450e+000f, -8.748055564494800e-001f, 2.196539839136946e-001f
+          };
+          filt_txt = "Bandpass 5-50Hz";
+          short_txt = "5-50 Hz";
+          break;
+        default:
+          //no filtering
+          b = new double[] {
+            1.0f
+          };
+          a = new double[] {
+            1.0f
+          };
+          filt_txt = "No BP Filter";
+          short_txt = "No Filter";
+        }  //end switch block
 
-      //create the bandpass filter
-      filtCoeff_bp[Ifilt] =  new FilterConstants(b, a, filt_txt, short_txt);
-    } //end loop over band pass filters
+        //create the bandpass filter
+        filtCoeff_bp[Ifilt] =  new FilterConstants(b, a, filt_txt, short_txt);
+      } //end loop over band pass filters
+
+      break;
+
+      // Ganglion board, sampling rate 200 Hz
+    case 1:
+      //loop over all of the pre-defined filter types
+      n_filt = filtCoeff_notch.length;
+      for (int Ifilt=0; Ifilt < n_filt; Ifilt++) {
+        switch (Ifilt) {
+        case 0:
+          //60 Hz notch filter, assumed fs = 200 Hz.  2nd Order Butterworth: b, a = signal.butter(2,[59.0 61.0]/(fs_Hz / 2.0), 'bandstop')
+          b2 = new double[] { 0.956543225556876f, 1.18293615779028f, 2.27881429174347f, 1.18293615779028f, 0.956543225556876f };
+          a2 = new double[] { 1, 1.20922304075909f, 2.27692490805579f, 1.15664927482146f, 0.914975834801432f };
+          filtCoeff_notch[Ifilt] =  new FilterConstants(b2, a2, "Notch 60Hz", "60Hz");
+          break;
+        case 1:
+          //50 Hz notch filter, assumed fs = 200 Hz.  2nd Order Butterworth: b, a = signal.butter(2,[49.0 51.0]/(fs_Hz / 2.0), 'bandstop')
+          b2 = new double[] { 0.956543225556877f, -2.34285519884863e-16f, 1.91308645111375f, -2.34285519884863e-16f, 0.956543225556877f};
+          a2 = new double[] { 1, -1.02695629777827e-15f, 1.91119706742607f, -1.01654795692241e-15f, 0.914975834801435f};
+          filtCoeff_notch[Ifilt] =  new FilterConstants(b2, a2, "Notch 50Hz", "50Hz");
+          break;
+        case 2:
+          //no notch filter
+          b2 = new double[] { 1.0f };
+          a2 = new double[] { 1.0f };
+          filtCoeff_notch[Ifilt] =  new FilterConstants(b2, a2, "No Notch", "None");
+          break;
+        }
+      } // end loop over notch filters
+
+      n_filt = filtCoeff_bp.length;
+      for (int Ifilt=0; Ifilt<n_filt; Ifilt++) {
+        //define bandpass filter
+        switch (Ifilt) {
+        case 0:
+          //butter(2,[1 50]/(200/2));  %bandpass filter
+          b = new double[] {
+            0.283751216219318f, 0, -0.567502432438636f, 0, 0.283751216219318f
+          };
+          a = new double[] {
+            1, -1.97380379923172f, 1.17181238127012f, -0.368664525962831f, 0.171812381270120f
+          };
+          filt_txt = "Bandpass 1-50Hz";
+          short_txt = "1-50 Hz";
+          break;
+        case 1:
+          //butter(2,[7 13]/(200/2));
+          b = new double[] {
+            0.00782020803349883f, 0, -0.0156404160669977f, 0, 0.00782020803349883f
+          };
+          a = new double[] {
+            1, -3.56776916484310f, 4.92946172209398f, -3.12070317627516f, 0.766006600943266f
+          };
+          filt_txt = "Bandpass 7-13Hz";
+          short_txt = "7-13 Hz";
+          break;
+        case 2:
+          //[b,a]=butter(2,[15 50]/(200/2)); %matlab command
+          b = new double[] {
+            0.167483800127017f, 0, -0.334967600254034f, 0, 0.167483800127017f
+          };
+          a = new double[] {
+            1, -1.56695061045088f, 1.22696619781982f, -0.619519163981230f, 0.226966197819818f
+          };
+          filt_txt = "Bandpass 15-50Hz";
+          short_txt = "15-50 Hz";
+          break;
+        case 3:
+          //[b,a]=butter(2,[5 50]/(200/2)); %matlab command
+          b = new double[] {
+            0.248341078962540f, 0, -0.496682157925080f, 0, 0.248341078962540f
+          };
+          a = new double[] {
+            1, -1.86549482213123f, 1.17757811892770f, -0.460665534278457f, 0.177578118927698f
+          };
+          filt_txt = "Bandpass 5-50Hz";
+          short_txt = "5-50 Hz";
+          break;
+        default:
+          //no filtering
+          b = new double[] {
+            1.0f
+          };
+          a = new double[] {
+            1.0f
+          };
+          filt_txt = "No BP Filter";
+          short_txt = "No Filter";
+        }  //end switch block
+
+        //create the bandpass filter
+        filtCoeff_bp[Ifilt] =  new FilterConstants(b, a, filt_txt, short_txt);
+      } //end loop over band pass filters
+
+      break;
+    }
   } //end defineFilters method
 
   public String getFilterDescription() {
@@ -4359,6 +5042,63 @@ class DataProcessing {
       data_std_uV[Ichan]=std(fooData_filt); //compute the standard deviation for the whole array "fooData_filt"
     } //close loop over channels
 
+
+    // calculate FFT after filter
+
+    //println("PPP" + fftBuff[0].specSize());
+    float prevFFTdata[] = new float[fftBuff[0].specSize()];
+    double foo;
+
+    //update the FFT (frequency spectrum)
+    for (int Ichan=0; Ichan < nchan; Ichan++) {
+
+      //copy the previous FFT data...enables us to apply some smoothing to the FFT data
+      for (int I=0; I < fftBuff[Ichan].specSize(); I++) prevFFTdata[I] = fftBuff[Ichan].getBand(I); //copy the old spectrum values
+
+      //prepare the data for the new FFT
+      float[] fooData;
+      if (isFFTFiltered == true) {
+        fooData = dataBuffY_filtY_uV[Ichan];  //use the filtered data for the FFT
+      } else {
+        fooData = dataBuffY_uV[Ichan];  //use the raw data for the FFT
+      }
+      fooData = Arrays.copyOfRange(fooData, fooData.length-Nfft, fooData.length);   //trim to grab just the most recent block of data
+      float meanData = mean(fooData);  //compute the mean
+      for (int I=0; I < fooData.length; I++) fooData[I] -= meanData; //remove the mean (for a better looking FFT
+
+      //compute the FFT
+      fftBuff[Ichan].forward(fooData); //compute FFT on this channel of data
+
+      //convert to uV_per_bin...still need to confirm the accuracy of this code.
+      //Do we need to account for the power lost in the windowing function?   CHIP  2014-10-24
+      for (int I=0; I < fftBuff[Ichan].specSize(); I++) {  //loop over each FFT bin
+        fftBuff[Ichan].setBand(I, (float)(fftBuff[Ichan].getBand(I) / fftBuff[Ichan].specSize()));
+      }
+
+      //average the FFT with previous FFT data so that it makes it smoother in time
+      double min_val = 0.01d;
+      for (int I=0; I < fftBuff[Ichan].specSize(); I++) {   //loop over each fft bin
+        if (prevFFTdata[I] < min_val) prevFFTdata[I] = (float)min_val; //make sure we're not too small for the log calls
+        foo = fftBuff[Ichan].getBand(I);
+        if (foo < min_val) foo = min_val; //make sure this value isn't too small
+
+        if (true) {
+          //smooth in dB power space
+          foo =   (1.0d-smoothFac[smoothFac_ind]) * java.lang.Math.log(java.lang.Math.pow(foo, 2));
+          foo += smoothFac[smoothFac_ind] * java.lang.Math.log(java.lang.Math.pow((double)prevFFTdata[I], 2));
+          foo = java.lang.Math.sqrt(java.lang.Math.exp(foo)); //average in dB space
+        } else {
+          //smooth (average) in linear power space
+          foo =   (1.0d-smoothFac[smoothFac_ind]) * java.lang.Math.pow(foo, 2);
+          foo+= smoothFac[smoothFac_ind] * java.lang.Math.pow((double)prevFFTdata[I], 2);
+          // take sqrt to be back into uV_rtHz
+          foo = java.lang.Math.sqrt(foo);
+        }
+        fftBuff[Ichan].setBand(I, (float)foo); //put the smoothed data back into the fftBuff data holder for use by everyone else
+      } //end loop over FFT bins
+    } //end the loop over channels.
+
+
     //find strongest channel
     int refChanInd = findMax(data_std_uV);
     //println("EEG_Processing: strongest chan (one referenced) = " + (refChanInd+1));
@@ -4378,7 +5118,7 @@ class DataProcessing {
       }
     }
   }
-};
+}
 
 //------------------------------------------------------------------------
 //                       Global Variables & Instances
@@ -4386,6 +5126,8 @@ class DataProcessing {
 
 DataProcessing_User dataProcessing_user;
 boolean drawEMG = false; //if true... toggles on EEG_Processing_User.draw and toggles off the headplot in Gui_Manager
+boolean drawAccel = true;
+boolean drawPulse = false;
 
 
 String oldCommand = "";
@@ -4437,12 +5179,12 @@ class DataProcessing_User {
 
 //////////////////////////////////////
 //
-// This file contains classes that are helpful for debugging, as well as the HelpWidget, 
-// which is used to give feedback to the GUI user in the small text window at the bottom of the GUI 
+// This file contains classes that are helpful for debugging, as well as the HelpWidget,
+// which is used to give feedback to the GUI user in the small text window at the bottom of the GUI
 //
 // Created: Conor Russomanno, June 2016
 // Based on code: Chip Audette, Oct 2013 - Dec 2014
-// 
+//
 //
 /////////////////////////////////////
 
@@ -4451,7 +5193,7 @@ class DataProcessing_User {
 //------------------------------------------------------------------------
 
 //set true if you want more verbosity in console.. verbosePrint("print_this_thing") is used to output feedback when isVerbose = true
-boolean isVerbose = true;
+boolean isVerbose = false;
 
 //Help Widget initiation
 HelpWidget helpWidget;
@@ -4526,7 +5268,7 @@ class HelpWidget {
     popStyle();
   }
 
-  public void output(String _output) {  
+  public void output(String _output) {
     currentOutput = _output;
     // prevOutputs.add(_output);
   }
@@ -4561,7 +5303,7 @@ public void signPost(String identifier) {
 //
 //  KNOWN ISSUES: Cannot resize with window dragging events
 //
-//  TODO: Add dynamic threshold functionality 
+//  TODO: Add dynamic threshold functionality
 ////////////////////////////////////////////////////////////////////////////////
 
 
@@ -4588,14 +5330,14 @@ class EMG_Widget extends Container{
   private int lastChan = 0;
   PApplet parent;
   String oldCommand = "";
-  
+
   Motor_Widget[] motorWidgets;
   TripSlider[] tripSliders;
   TripSlider[] untripSliders;
-  
-  
+
+
   public Config_Widget configWidget;
-  
+
   class Motor_Widget{
     //variables
     boolean isTriggered = false;
@@ -4611,7 +5353,7 @@ class EMG_Widget extends Container{
     int switchCounter = 0;
     float timeOfLastTrip = 0;
     float tripThreshold = 0.75f;
-    float untripThreshold = 0.6f;    
+    float untripThreshold = 0.6f;
     //if writing to a serial port
     int output = 0;                   //value between 0-255 that is the relative position of the current uV average between the rolling lower and upper uV thresholds
     float output_normalized = 0;      //converted to between 0-1
@@ -4619,32 +5361,33 @@ class EMG_Widget extends Container{
     boolean analogBool = true;        //Analog events?
     boolean digitalBool = true;       //Digital events?
   }
-  
+
   //Constructor
   EMG_Widget(int NCHAN, float sample_rate_Hz, Container container, PApplet p){
-    
+
     super(container, "WHOLE");
     parent = p;
     cp5Serial = new ControlP5(parent);
-    
+
     this.nchan = NCHAN;
     this.fs_Hz = sample_rate_Hz;
-    
+    // println("EMG_Widget: constructor: NCHAN " + NCHAN);
     tripSliders = new TripSlider[NCHAN];
     untripSliders = new TripSlider[NCHAN];
     motorWidgets = new Motor_Widget[NCHAN];
-    
+
     for (int i = 0; i < NCHAN; i++){
       motorWidgets[i] = new Motor_Widget();
       motorWidgets[i].ourChan = i;
     }
-    
+
     initSliders(w);
-    
+
     configButton = new Button(PApplet.parseInt(x) - 60,PApplet.parseInt(y),20,20,"O",fontInfo.buttonLabel_size);
     configWidget = new Config_Widget(NCHAN, sample_rate_Hz, container, motorWidgets);
+
   }
-  
+
   //Initalizes the threshold sliders
   public void initSliders(float rw){
     //Stole some logic from the rectangle drawing in draw()
@@ -4652,10 +5395,10 @@ class EMG_Widget extends Container{
     int colNum = motorWidgets.length / rowNum;
     int index = 0;
     float colOffset = rw / colNum;
-    
-    if(nchan == 8){
+
+    if (nchan == 4) {
       for (int i = 0; i < rowNum; i++) {
-          for (int j = 0; j < colNum; j++) {      
+          for (int j = 0; j < colNum; j++) {
 
             if(i > 2){
               tripSliders[index] = new TripSlider(PApplet.parseInt(752 + (j * 205)), PApplet.parseInt(118 + (i * 86)), 0, PApplet.parseInt(3*colOffset/32), 2, tripSliders,true, motorWidgets[index]);
@@ -4665,7 +5408,26 @@ class EMG_Widget extends Container{
               tripSliders[index] = new TripSlider(PApplet.parseInt(752 + (j * 205)), PApplet.parseInt(117 + (i * 86)), 0, PApplet.parseInt(3*colOffset/32), 2, tripSliders,true, motorWidgets[index]);
               untripSliders[index] = new TripSlider(PApplet.parseInt(752 + (j * 205)), PApplet.parseInt(117 + (i * 86)), 0, PApplet.parseInt(3*colOffset/32), 2, tripSliders,false, motorWidgets[index]);
             }
-            
+
+            tripSliders[index].setStretchPercentage(motorWidgets[index].tripThreshold);
+            untripSliders[index].setStretchPercentage(motorWidgets[index].untripThreshold);
+            index++;
+          }
+      }
+    }
+    else if(nchan == 8){
+      for (int i = 0; i < rowNum; i++) {
+          for (int j = 0; j < colNum; j++) {
+
+            if(i > 2){
+              tripSliders[index] = new TripSlider(PApplet.parseInt(752 + (j * 205)), PApplet.parseInt(118 + (i * 86)), 0, PApplet.parseInt(3*colOffset/32), 2, tripSliders,true, motorWidgets[index]);
+              untripSliders[index] = new TripSlider(PApplet.parseInt(752 + (j * 205)), PApplet.parseInt(118 + (i * 86)), 0, PApplet.parseInt(3*colOffset/32), 2, tripSliders,false, motorWidgets[index]);
+            }
+            else{
+              tripSliders[index] = new TripSlider(PApplet.parseInt(752 + (j * 205)), PApplet.parseInt(117 + (i * 86)), 0, PApplet.parseInt(3*colOffset/32), 2, tripSliders,true, motorWidgets[index]);
+              untripSliders[index] = new TripSlider(PApplet.parseInt(752 + (j * 205)), PApplet.parseInt(117 + (i * 86)), 0, PApplet.parseInt(3*colOffset/32), 2, tripSliders,false, motorWidgets[index]);
+            }
+
             tripSliders[index].setStretchPercentage(motorWidgets[index].tripThreshold);
             untripSliders[index].setStretchPercentage(motorWidgets[index].untripThreshold);
             index++;
@@ -4674,8 +5436,8 @@ class EMG_Widget extends Container{
     }
     else if(nchan == 16){
       for (int i = 0; i < rowNum; i++) {
-          for (int j = 0; j < colNum; j++) {    
-            
+          for (int j = 0; j < colNum; j++) {
+
             if( j < 2){
               tripSliders[index] = new TripSlider(PApplet.parseInt(683 + (j * 103)), PApplet.parseInt(118 + (i * 86)), 0, PApplet.parseInt(3*colOffset/32), 2, tripSliders,true, motorWidgets[index]);
               untripSliders[index] = new TripSlider(PApplet.parseInt(683 + (j * 103)), PApplet.parseInt(118 + (i * 86)), 0, PApplet.parseInt(3*colOffset/32), 2, tripSliders,false, motorWidgets[index]);
@@ -4684,28 +5446,28 @@ class EMG_Widget extends Container{
               tripSliders[index] = new TripSlider(PApplet.parseInt(683 + (j * 103) - 1), PApplet.parseInt(118 + (i * 86)), 0, PApplet.parseInt(3*colOffset/32), 2, tripSliders,true, motorWidgets[index]);
               untripSliders[index] = new TripSlider(PApplet.parseInt(683 + (j * 103) - 1), PApplet.parseInt(118 + (i * 86)), 0, PApplet.parseInt(3*colOffset/32), 2, tripSliders,false, motorWidgets[index]);
             }
-            
+
             tripSliders[index].setStretchPercentage(motorWidgets[index].tripThreshold);
             untripSliders[index].setStretchPercentage(motorWidgets[index].untripThreshold);
             index++;
             println(index);
-            
+
 
           }
       }
     }
-    
+
   }
-  
+
   public void process(float[][] data_newest_uV, //holds raw EEG data that is new since the last call
         float[][] data_long_uV, //holds a longer piece of buffered EEG data, of same length as will be plotted on the screen
         float[][] data_forDisplay_uV, //this data has been filtered and is ready for plotting on the screen
         FFT[] fftData) {              //holds the FFT (frequency spectrum) of the latest data
 
-    //for example, you could loop over each EEG channel to do some sort of time-domain processing 
+    //for example, you could loop over each EEG channel to do some sort of time-domain processing
     //using the sample values that have already been filtered, as will be plotted on the display
     //float EEG_value_uV;
-    
+
     //looping over channels and analyzing input data
     for (Motor_Widget cfc : motorWidgets) {
       cfc.myAverage = 0.0f;
@@ -4716,13 +5478,13 @@ class EMG_Widget extends Container{
            cfc.myAverage += cfc.acceptableLimitUV; //if it's greater than the limit, just add the limit
          }
       }
-      cfc.myAverage = cfc.myAverage / PApplet.parseFloat(cfc.averagePeriod); //finishing the average     
-      
-      if(cfc.myAverage >= cfc.upperThreshold && cfc.myAverage <= cfc.acceptableLimitUV){ // 
-         cfc.upperThreshold = cfc.myAverage; 
+      cfc.myAverage = cfc.myAverage / PApplet.parseFloat(cfc.averagePeriod); //finishing the average
+
+      if(cfc.myAverage >= cfc.upperThreshold && cfc.myAverage <= cfc.acceptableLimitUV){ //
+         cfc.upperThreshold = cfc.myAverage;
       }
       if(cfc.myAverage <= cfc.lowerThreshold){
-         cfc.lowerThreshold = cfc.myAverage; 
+         cfc.lowerThreshold = cfc.myAverage;
       }
       if(cfc.upperThreshold >= (cfc.myAverage + 35)){
         cfc.upperThreshold *= .97f;
@@ -4733,15 +5495,15 @@ class EMG_Widget extends Container{
       //output_L = (int)map(myAverage_L, lowerThreshold_L, upperThreshold_L, 0, 255);
       cfc.output_normalized = map(cfc.myAverage, cfc.lowerThreshold, cfc.upperThreshold, 0, 1);
       cfc.output_adjusted = ((-0.1f/(cfc.output_normalized*255.0f)) + 255.0f);
-      
-      
-      
+
+
+
       //=============== TRIPPIN ==================
       //= Just calls all the trip events         =
       //==========================================
-      
+
       switch(cfc.ourChan){
-      
+
         case 0:
           if (configWidget.digital.wasPressed) digitalEventChan0(cfc);
           if (configWidget.analog.wasPressed) analogEventChan0(cfc);
@@ -4808,13 +5570,13 @@ class EMG_Widget extends Container{
           break;
         default:
           break;
-      
+
       }
 
     }
-    
+
     //=================== OpenBionics switch example ==============================
-    
+
     //if (millis() - motorWidgets[1].timeOfLastTrip >= 2000 && serialOutEMG != null) {
     //  switch(motorWidgets[1].switchCounter){
     //    case 1:
@@ -4876,7 +5638,7 @@ class EMG_Widget extends Container{
     //          //RED CIRCLE FOR JAW, BLUE FOR BROW
     //          break;
     //        case 2:
-    //          //GREEN CIRCLE FOR JAW, BLUE FOR BROW                
+    //          //GREEN CIRCLE FOR JAW, BLUE FOR BROW
     //          serialOutEMG.write(oldCommand);
     //          delay(100);
     //          oldCommand = "234";
@@ -4939,15 +5701,15 @@ class EMG_Widget extends Container{
     //          break;
     //      }
     //      break;
-    //    //case 6: 
+    //    //case 6:
     //    //  println("Six Brow Raises");
     //    //  break;
     //  }
     //  motorWidgets[1].switchCounter = 0;
     //}
-  
 
-   
+
+
    //----------------- Leftover from Tou Code, what does this do? ----------------------------
     //OR, you could loop over each EEG channel and do some sort of frequency-domain processing from the FFT data
     float FFT_freq_Hz, FFT_value_uV;
@@ -4956,29 +5718,29 @@ class EMG_Widget extends Container{
      for (int Ibin=0; Ibin < fftBuff[Ichan].specSize(); Ibin++){
        FFT_freq_Hz = fftData[Ichan].indexToFreq(Ibin);
        FFT_value_uV = fftData[Ichan].getBand(Ibin);
-        
+
        //add your processing here...
-        
+
      }
     }
     //---------------------------------------------------------------------------------
-    
+
     }
-    
-    
+
+
     public void draw(){
       super.draw();
       if(drawEMG){
-                      
-        cp5Serial.setVisible(true);  
+
+        cp5Serial.setVisible(true);
 
         pushStyle();
         configButton.draw();
-        if(!configButton.wasPressed){   
-          cp5Serial.get(MenuList.class, "serialListConfig").setVisible(false); 
-          cp5Serial.get(MenuList.class, "baudList").setVisible(false);   
+        if(!configButton.wasPressed){
+          cp5Serial.get(MenuList.class, "serialListConfig").setVisible(false);
+          cp5Serial.get(MenuList.class, "baudList").setVisible(false);
           float rx = x, ry = y, rw = w, rh = h;
-          
+
           float scaleFactor = 3.0f;
           float scaleFactorJaw = 1.5f;
           int rowNum = 4;
@@ -4986,11 +5748,11 @@ class EMG_Widget extends Container{
           float rowOffset = rh / rowNum;
           float colOffset = rw / colNum;
           int index = 0;
-    
-          //new 
+
+          //new
           for (int i = 0; i < rowNum; i++) {
             for (int j = 0; j < colNum; j++) {
-              
+
               pushMatrix();
               translate(rx + j * colOffset, ry + i * rowOffset);
               //draw visulizer
@@ -5006,19 +5768,19 @@ class EMG_Widget extends Container{
               fill(255,0,0, 125);
               noStroke();
               ellipse(2*colOffset/8, rowOffset / 2, scaleFactor * motorWidgets[i * colNum + j].myAverage, scaleFactor * motorWidgets[i * colNum + j].myAverage);
-            
+
              //draw background bar for mapped uV value indication
-            
+
               fill(0,255,255,125);
               rect(5*colOffset/8, 2 * rowOffset / 8 - 7, (3*colOffset/32), PApplet.parseInt((4*rowOffset/8) + 7));
-              
+
               //println("WOAH THIS: " + (4*rowOffset/8));
               //draw real time bar of actually mapped value
               rect(5*colOffset/8, 6 *rowOffset / 8 , (3*colOffset/32), map(motorWidgets[i * colNum + j].output_normalized, 0, 1, 0, (-1) * PApplet.parseInt((4*rowOffset/8) ) -7));
-            
-    
+
+
               popMatrix();
-              
+
               //draw thresholds
               tripSliders[index].update();
               tripSliders[index].display();
@@ -5027,24 +5789,24 @@ class EMG_Widget extends Container{
               index++;
             }
           }
-    
+          drawTriggerFeedback();
 
           popStyle();
         }
        else{
          configWidget.draw();
        }
-       
+
       }
       else{
-        cp5Serial.setVisible(false);  
+        cp5Serial.setVisible(false);
        }
 
     if(serialOutEMG != null) drawTriggerFeedback();
   } //end of draw
 
-  
-	
+
+
   //Feedback for triggers/switches.
   //Currently only used for the OpenBionics implementation, but left
   //in to give an idea of how it can be used.
@@ -5052,7 +5814,7 @@ class EMG_Widget extends Container{
     //Is the board streaming data?
     //if so ... draw feedback
     if (isRunning) {
-     
+
       switch (motorWidgets[0].switchCounter){
         case 1:
           fill(255,0,0);
@@ -5072,66 +5834,66 @@ class EMG_Widget extends Container{
           break;
       }
 
-      switch (motorWidgets[1].switchCounter){
-        case 1:
-          fill(255,0,0);
-          ellipse(width/2, height - 70 , 20, 20);
-          break;
-        case 2:
-          fill(0,255,0);
-          ellipse(width/2, height - 70 , 20, 20);
-          break;
-        case 3:
-          fill(0,0,255);
-          ellipse(width/2, height - 70 , 20, 20);
-          break;
-        case 4:
-          fill(128,0,128);
-          ellipse(width/2, height - 70 , 20, 20);
-          break;
-        case 5:
-          fill(255,255,0);
-          ellipse(width/2, height - 70 , 20, 20);
-          break;
-      }
+      //switch (motorWidgets[1].switchCounter){
+      //  case 1:
+      //    fill(255,0,0);
+      //    ellipse(width/2, height - 70 , 20, 20);
+      //    break;
+      //  case 2:
+      //    fill(0,255,0);
+      //    ellipse(width/2, height - 70 , 20, 20);
+      //    break;
+      //  case 3:
+      //    fill(0,0,255);
+      //    ellipse(width/2, height - 70 , 20, 20);
+      //    break;
+      //  case 4:
+      //    fill(128,0,128);
+      //    ellipse(width/2, height - 70 , 20, 20);
+      //    break;
+      //  case 5:
+      //    fill(255,255,0);
+      //    ellipse(width/2, height - 70 , 20, 20);
+      //    break;
+      //}
 
     }
   }
-  
+
   //Mouse pressed event
   public void mousePressed(){
     if(mouseX >= x - 35 && mouseX <= x+w && mouseY >= y && mouseY <= y+h && configButton.wasPressed){
-       
-      //Handler for channel selection. No two channels can be 
+
+      //Handler for channel selection. No two channels can be
       //selected at the same time. All values are then set
       //to whatever value the channel specifies they should
       //have (particularly analog and digital buttons)
-      
+
       for(int i = 0; i < nchan; i++){
         if(motorWidget.configWidget.chans[i].isMouseHere()) {
           motorWidget.configWidget.chans[i].setIsActive(true);
           motorWidget.configWidget.chans[i].wasPressed = true;
           lastChan = i;
-          
+
           if(!motorWidgets[lastChan].digitalBool){
             motorWidget.configWidget.digital.setIsActive(false);
           }
           else if(motorWidgets[lastChan].digitalBool){
             motorWidget.configWidget.digital.setIsActive(true);
           }
-        
+
           if(!motorWidgets[lastChan].analogBool){
             motorWidget.configWidget.analog.setIsActive(false);
           }
           else if(motorWidgets[lastChan].analogBool){
             motorWidget.configWidget.analog.setIsActive(true);
           }
-        
-          break;          
+
+          break;
         }
-        
+
       }
-      
+
       //Digital button event
       if(motorWidget.configWidget.digital.isMouseHere()){
         if(motorWidget.configWidget.digital.wasPressed){
@@ -5145,7 +5907,7 @@ class EMG_Widget extends Container{
           motorWidget.configWidget.digital.setIsActive(true);
         }
       }
-      
+
       //Analog button event
       if(motorWidget.configWidget.analog.isMouseHere()){
         if(motorWidget.configWidget.analog.wasPressed){
@@ -5159,20 +5921,20 @@ class EMG_Widget extends Container{
           motorWidget.configWidget.analog.setIsActive(true);
         }
       }
-      
+
       //Connect button event
       if(motorWidget.configWidget.connectToSerial.isMouseHere()){
         motorWidget.configWidget.connectToSerial.wasPressed = true;
         motorWidget.configWidget.connectToSerial.setIsActive(true);
       }
-      
+
     }
     else if(mouseX >= (x-60) && mouseX <= (x-40) && mouseY >= y && mouseY <= y+20){
-      
+
       //Open configuration menu
       if(configButton.isMouseHere()){
         configButton.setIsActive(true);
-        
+
         if(configButton.wasPressed){
           configButton.wasPressed = false;
           configButton.setString("O");
@@ -5183,27 +5945,28 @@ class EMG_Widget extends Container{
         }
       }
     }
-  
+
   }
 
   //Mouse Released Event
   public void mouseReleased(){
+    // println("EMG_Widget: mouseReleased: nchan " + nchan);
     for(int i = 0; i < nchan; i++){
       if(!motorWidget.configWidget.dynamicThreshold.wasPressed && !configButton.wasPressed){
         tripSliders[i].releaseEvent();
         untripSliders[i].releaseEvent();
       }
-      
+
       if(i != lastChan){
         motorWidget.configWidget.chans[i].setIsActive(false);
         motorWidget.configWidget.chans[i].wasPressed = false;
       }
     }
-    
+
     if(motorWidget.configWidget.connectToSerial.isMouseHere()){
       motorWidget.configWidget.connectToSerial.wasPressed = false;
       motorWidget.configWidget.connectToSerial.setIsActive(false);
-      
+
       try{
         serialOutEMG = new Serial(parent,serialNameEMG,Integer.parseInt(baudEMG));
         motorWidget.configWidget.print_onscreen("Connected!");
@@ -5212,18 +5975,18 @@ class EMG_Widget extends Container{
         motorWidget.configWidget.print_onscreen("Could not connect!");
       }
     }
-    
+
     configButton.setIsActive(false);
   }
-  
-  
+
+
   //=============== Config_Widget ================
   //=  The configuration menu. Customize in any  =
   //=  way that could help you out!              =
   //=                                            =
   //=  TODO: Add dynamic threshold functionality =
   //==============================================
-  
+
   class Config_Widget extends Container{
     private float fs_Hz;
     private int nchan;
@@ -5234,36 +5997,38 @@ class EMG_Widget extends Container{
     public Button valueThreshold;
     public Button dynamicThreshold;
     public Button connectToSerial;
-    
+
     MenuList serialListLocal;
     MenuList baudList;
     String last_message = "";
     String[] serialPortsLocal = new String[Serial.list().length];
-    
-    
+
+
     //Constructor
     public Config_Widget(int NCHAN, float sample_rate_Hz, Container container, Motor_Widget[] parent){
       super(container, "WHOLE");
-      
+
+      // println("EMG_Widget: Config_Widget: nchan " + NCHAN);
+
       this.nchan = NCHAN;
       this.fs_Hz = sample_rate_Hz;
       this.parent = parent;
-      
-      
+
+
       chans = new Button[NCHAN];
       digital = new Button(PApplet.parseInt(x + 55),PApplet.parseInt(y + 60),10,10,"",fontInfo.buttonLabel_size);
       analog = new Button(PApplet.parseInt(x - 15),PApplet.parseInt(y + 60),10,10,"",fontInfo.buttonLabel_size);
       valueThreshold = new Button(PApplet.parseInt(x+235), PApplet.parseInt(y+60), 10,10,"",fontInfo.buttonLabel_size);
       dynamicThreshold = new Button(PApplet.parseInt(x+150), PApplet.parseInt(y+60), 10,10,"",fontInfo.buttonLabel_size);  //CURRENTLY DOES NOTHING! Working on implementation
       connectToSerial = new Button(PApplet.parseInt(x+235), PApplet.parseInt(y+297),100,25,"Connect", 18);
-      
+
       digital.setIsActive(true);
       digital.wasPressed = true;
       analog.setIsActive(true);
       analog.wasPressed = true;
       valueThreshold.setIsActive(true);
       valueThreshold.wasPressed = true;
-      
+
       //Available serial outputs
       serialListLocal = new MenuList(cp5Serial, "serialListConfig", 236, 120, f2);
       serialListLocal.setPosition(x - 10 , y + 160);
@@ -5272,11 +6037,11 @@ class EMG_Widget extends Container{
         String tempPort = serialPortsLocal[(serialPortsLocal.length-1) - i]; //list backwards... because usually our port is at the bottom
         if(!tempPort.equals(openBCI_portName)) serialListLocal.addItem(makeItem(tempPort));
       }
-      
-      //List of BAUD values 
+
+      //List of BAUD values
       baudList = new MenuList(cp5Serial, "baudList", 100, 120, f2);
       baudList.setPosition(x+235, y + 160);
-     
+
       baudList.addItem(makeItem("230400"));
       baudList.addItem(makeItem("115200"));
       baudList.addItem(makeItem("57600"));
@@ -5293,45 +6058,45 @@ class EMG_Widget extends Container{
       baudList.addItem(makeItem("1200"));
       baudList.addItem(makeItem("600"));
       baudList.addItem(makeItem("300"));
-      
-      
+
+
       //Set first items to active
       Map bob = ((MenuList)baudList).getItem(0);
       baudEMG = (String)bob.get("headline");
       baudList.activeItem = 0;
-     
+
       Map bobSer = ((MenuList)serialListLocal).getItem(0);
       serialNameEMG = (String)bobSer.get("headline");
       serialListLocal.activeItem = 0;
-      
+
       //Hide the list until open button clicked
-      cp5Serial.get(MenuList.class, "serialListConfig").setVisible(false); 
-      cp5Serial.get(MenuList.class, "baudList").setVisible(false);   
-      
+      cp5Serial.get(MenuList.class, "serialListConfig").setVisible(false);
+      cp5Serial.get(MenuList.class, "baudList").setVisible(false);
+
       //Buttons for different channels (Just displays number if 16 channel)
       for (int i = 0; i < NCHAN; i++){
         if(NCHAN == 8) chans[i] = new Button(PApplet.parseInt(x - 30 + (i * (w-10)/nchan )), PApplet.parseInt(y + 10), PApplet.parseInt((w-10)/nchan), 30,"CHAN " + (i+1),fontInfo.buttonLabel_size);
         else chans[i] = new Button(PApplet.parseInt(x - 30 + (i * (w-10)/nchan )), PApplet.parseInt(y + 5), PApplet.parseInt((w-10)/nchan), 30,"" + (i+1),fontInfo.buttonLabel_size);
       }
-      
+
       //Set fist channel as active
       chans[0].setIsActive(true);
       chans[0].wasPressed = true;
     }
-  
+
     public void draw(){
       pushStyle();
-      
+
       float rx = x, ry = y, rw = w, rh =h;
       //Config Window Rectangle
       fill(211,211,211);
       rect(rx - 35,ry,rw,rh);
-      
+
       //Serial Config Rectangle
       fill(190,190,190);
       rect(rx - 30,ry+90,rw- 10,rh-95);
-      
-      
+
+
       //Channel Configs
       fill(255,255,255);
       for(int i = 0; i < nchan; i++){
@@ -5340,11 +6105,11 @@ class EMG_Widget extends Container{
       drawAnalogSelection();
       drawThresholdSelection();
       drawMenuLists();
-      
+
       print_lastmessage();
-    
+
     }
-    
+
     public void drawAnalogSelection(){
       fill(233,233,233);
       rect(x-30,y+50,165,30);
@@ -5354,13 +6119,13 @@ class EMG_Widget extends Container{
       text("Analog",x+20, y+63);
       text("Digital",x+90, y+63);
     }
-    
+
     public void drawThresholdSelection(){
       fill(233,233,233);
       rect(x+140,y+50,230,30);
       valueThreshold.draw();
       dynamicThreshold.draw();
-      
+
       fill(50);
       textAlign(LEFT);
       textSize(13);
@@ -5368,24 +6133,24 @@ class EMG_Widget extends Container{
       text("Trip Value     %" + (double)Math.round((parent[lastChan].tripThreshold * 100) * 10d) / 10d,x+250, y+63);
       text("Untrip Value %"+ (double)Math.round((parent[lastChan].untripThreshold * 100) * 10d) / 10d,x+250, y+78);
     }
-    
+
     public void drawMenuLists(){
       fill(50);
       textFont(f1);
       textAlign(CENTER);
       textSize(18);
       text("Serial Out Configuration",x+160, y+120);
-      
+
       textSize(14);
       textAlign(LEFT);
       text("Serial Port", x-10, y + 150);
       text("BAUD Rate", x+235, y+150);
       cp5Serial.get(MenuList.class, "serialListConfig").setVisible(true); //make sure the serialList menulist is visible
       cp5Serial.get(MenuList.class, "baudList").setVisible(true); //make sure the baudList menulist is visible
-      
+
       connectToSerial.draw();
     }
-    
+
     public void print_onscreen(String localstring){
         textAlign(LEFT);
         fill(0);
@@ -5394,7 +6159,7 @@ class EMG_Widget extends Container{
         text(localstring, x, y + 290 + 15, ( w - 180), 40 -15);
         this.last_message = localstring;
       }
-      
+
     public void print_lastmessage(){
         textAlign(LEFT);
         fill(0);
@@ -5402,11 +6167,11 @@ class EMG_Widget extends Container{
         fill(255);
         text(this.last_message, x, y + 290 + 15, ( w - 180), 40 -15);
       }
-  
+
   }
-  
-  
-  
+
+
+
   //============= TripSlider =============
   //=  Class for moving thresholds. Can  =
   //=  be dragged up and down, but lower =
@@ -5429,7 +6194,7 @@ class EMG_Widget extends Container{
     TripSlider[] others;
     int current_color = color(255,255,255);
     Motor_Widget parent;
-    
+
     //Constructor
     TripSlider(int ix, int iy, int il, int iwid, int ilen, TripSlider[] o, boolean wastrip, Motor_Widget p) {
       lx = ix;
@@ -5443,31 +6208,31 @@ class EMG_Widget extends Container{
       trip = wastrip;  //Boolean to distinguish between trip and untrip thresholds
       parent = p;
     }
-    
+
     //Called whenever thresholds are dragged
     public void update() {
       boxx = lx - wid/2;
       boxy = ly - stretch;
-      
+
       for (int i=0; i<others.length; i++) {
         if (others[i].locked == true) {
           otherslocked = true;
           break;
         } else {
           otherslocked = false;
-        }  
+        }
       }
-      
+
       if (otherslocked == false) {
         overEvent();
         pressEvent();
       }
-      
+
       if (press) {
         //Some of this may need to be refactored in order to support window resizing.
         if(trip) stretch = lock(ly -mouseY, PApplet.parseInt(parent.untripThreshold * (50 - len)), 50 - len);
         else stretch = lock(ly -mouseY, 0, PApplet.parseInt(parent.tripThreshold * (50- len)));
-        
+
         if((ly - mouseY) > 50-len && trip) parent.tripThreshold = 1;
         else if((ly - mouseY) > 50 -len && !trip) parent.untripThreshold = 1;
         else if((ly - mouseY) < 0 && trip) parent.tripThreshold = 0;
@@ -5476,7 +6241,7 @@ class EMG_Widget extends Container{
         else if(!trip) parent.untripThreshold = PApplet.parseFloat(ly - mouseY) / (50 - len);
       }
     }
-    
+
     //Checks if mouse is here
     public void overEvent() {
       if (overRect(boxx, boxy, wid, len)) {
@@ -5485,7 +6250,7 @@ class EMG_Widget extends Container{
         over = false;
       }
     }
-    
+
     //Checks if mouse is pressed
     public void pressEvent() {
       if (over && mousePressed || locked) {
@@ -5495,16 +6260,16 @@ class EMG_Widget extends Container{
         press = false;
       }
     }
-    
+
     //Mouse was released
     public void releaseEvent() {
       locked = false;
     }
-    
+
     //Color selector and cursor setter
     public void setColor(){
       if(over) {
-        current_color = color(127,134,143); 
+        current_color = color(127,134,143);
         if(!drawHand){
           cursor(HAND);
           drawHand = true;
@@ -5519,13 +6284,13 @@ class EMG_Widget extends Container{
         }
       }
     }
-    
+
     //Helper function to make setting default threshold values easier.
     //Expects a float as input (0.25 is 25%)
     public void setStretchPercentage(float val){
       stretch = lock(PApplet.parseInt((50 - len) * val), 0, 50 - len);
     }
-    
+
     //Displays the thresholds
     public void display() {
       fill(255);
@@ -5535,25 +6300,25 @@ class EMG_Widget extends Container{
       fill(current_color);
       rect(boxx, boxy, wid, len);
     }
-    
+
     //Check if the mouse is here
     public boolean overRect(int lx, int ly, int lwidth, int lheight) {
-      if (mouseX >= lx && mouseX <= lx+lwidth && 
+      if (mouseX >= lx && mouseX <= lx+lwidth &&
           mouseY >= ly && mouseY <= ly+lheight) {
         return true;
       } else {
         return false;
       }
     }
-  
+
     //Locks the threshold in place
-    public int lock(int val, int minv, int maxv) { 
-      return  min(max(val, minv), maxv); 
-    } 
+    public int lock(int val, int minv, int maxv) {
+      return  min(max(val, minv), maxv);
+    }
   }
 
-  
-  
+
+
   //===================== DIGITAL EVENTS =============================
   //=  Digital Events work by tripping certain thresholds, and then  =
   //=  untripping said thresholds. In order to use digital events    =
@@ -5567,7 +6332,7 @@ class EMG_Widget extends Container{
   //=  This system supports both digital and analog events           =
   //=  simultaneously and seperated.                                 =
   //==================================================================
-  
+
   //Channel 1 Event
   public void digitalEventChan0(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5576,12 +6341,12 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(motorWidgets[0].switchCounter > 4) motorWidgets[0].switchCounter = 0;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5592,10 +6357,10 @@ class EMG_Widget extends Container{
       //Untripped
       cfc.switchTripped = false;
     }
-    
-  
+
+
   }
-  
+
   //Channel 2 Event
   public void digitalEventChan1(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5604,10 +6369,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5618,11 +6383,11 @@ class EMG_Widget extends Container{
       //Untripped
       cfc.switchTripped = false;
     }
-    
-  
-  
+
+
+
   }
-  
+
   //Channel 3 Event
   public void digitalEventChan2(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5631,10 +6396,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5645,11 +6410,11 @@ class EMG_Widget extends Container{
       //Untripped
       cfc.switchTripped = false;
     }
-    
-  
-  
+
+
+
   }
-  
+
   //Channel 4 Event
   public void digitalEventChan3(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5658,10 +6423,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5672,11 +6437,11 @@ class EMG_Widget extends Container{
       //Untripped
       cfc.switchTripped = false;
     }
-    
-  
-  
+
+
+
   }
-  
+
   //Channel 5 Event
   public void digitalEventChan4(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5685,10 +6450,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5699,11 +6464,11 @@ class EMG_Widget extends Container{
       //Untripped
       cfc.switchTripped = false;
     }
-    
-  
-  
+
+
+
   }
-  
+
   //Channel 6 Event
   public void digitalEventChan5(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5712,10 +6477,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5726,9 +6491,9 @@ class EMG_Widget extends Container{
       //Untripped
       cfc.switchTripped = false;
     }
-  
+
   }
-  
+
   //Channel 7 Event
   public void digitalEventChan6(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5737,10 +6502,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5752,7 +6517,7 @@ class EMG_Widget extends Container{
       cfc.switchTripped = false;
     }
   }
-  
+
   //Channel 8 Event
   public void digitalEventChan7(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5761,10 +6526,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5776,7 +6541,7 @@ class EMG_Widget extends Container{
       cfc.switchTripped = false;
     }
   }
-  
+
   //Channel 9 Event
   public void digitalEventChan8(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5785,10 +6550,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5799,9 +6564,9 @@ class EMG_Widget extends Container{
       //Untripped
       cfc.switchTripped = false;
     }
-  
+
   }
-  
+
   //Channel 10 Event
   public void digitalEventChan9(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5810,10 +6575,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5825,7 +6590,7 @@ class EMG_Widget extends Container{
       cfc.switchTripped = false;
     }
   }
-  
+
   //Channel 11 Event
   public void digitalEventChan10(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5834,10 +6599,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5849,7 +6614,7 @@ class EMG_Widget extends Container{
       cfc.switchTripped = false;
     }
   }
-  
+
   //Channel 12 Event
   public void digitalEventChan11(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5858,10 +6623,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5873,7 +6638,7 @@ class EMG_Widget extends Container{
       cfc.switchTripped = false;
     }
   }
-  
+
   //Channel 13 Event
   public void digitalEventChan12(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5882,10 +6647,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5897,7 +6662,7 @@ class EMG_Widget extends Container{
       cfc.switchTripped = false;
     }
   }
-  
+
   //Channel 14 Event
   public void digitalEventChan13(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5906,10 +6671,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5921,7 +6686,7 @@ class EMG_Widget extends Container{
       cfc.switchTripped = false;
     }
   }
-  
+
   //Channel 15 Event
   public void digitalEventChan14(Motor_Widget cfc){
     //Local instances of Motor_Widget fields
@@ -5930,10 +6695,10 @@ class EMG_Widget extends Container{
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5945,20 +6710,20 @@ class EMG_Widget extends Container{
       cfc.switchTripped = false;
     }
   }
-  
+
   //Channel 16 Event
   public void digitalEventChan15(Motor_Widget cfc){
-  
+
     //Local instances of Motor_Widget fields
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
+
     //Custom waiting threshold
     int timeToWaitThresh = 750;
-    
+
     if(output_normalized >= tripThreshold && !switchTripped && millis() - timeOfLastTrip >= timeToWaitThresh){
       //Tripped
       cfc.switchTripped = true;
@@ -5970,8 +6735,8 @@ class EMG_Widget extends Container{
       cfc.switchTripped = false;
     }
   }
-  
-  
+
+
   //===================== ANALOG EVENTS ===========================
   //=  Analog events are a big more complicated than digital      =
   //=  events. In order to use analog events you must map the     =
@@ -5981,17 +6746,17 @@ class EMG_Widget extends Container{
   //=  Check out analogEventChan0() for the OpenBionics analog    =
   //=  event example to get an idea of how to use analog events.  =
   //===============================================================
-  
+
   //Channel 1 Event
   public void analogEventChan0(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-    
-    
+
+
     //================= OpenBionics Analog Movement Example =======================
     if(serialOutEMG != null){
       //println("Output normalized: " + int(map(output_normalized, 0, 1, 0, 100)));
@@ -6000,162 +6765,162 @@ class EMG_Widget extends Container{
         delay(10);
       }
       else serialOutEMG.write("G0P0");
-      
+
     }
-    
+
   }
-  
+
   //Channel 2 Event
   public void analogEventChan1(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
-  
+
   }
-  
+
   //Channel 3 Event
   public void analogEventChan2(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 4 Event
   public void analogEventChan3(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 5 Event
   public void analogEventChan4(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 6 Event
   public void analogEventChan5(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 7 Event
   public void analogEventChan6(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 8 Event
   public void analogEventChan7(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 9 Event
   public void analogEventChan8(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 10 Event
   public void analogEventChan9(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 11 Event
   public void analogEventChan10(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
-    float timeOfLastTrip = cfc.timeOfLastTrip;  
+    float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 12 Event
   public void analogEventChan11(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 13 Event
   public void analogEventChan12(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 14 Event
   public void analogEventChan13(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
   //Channel 15 Event
   public void analogEventChan14(Motor_Widget cfc){
-  
-    float output_normalized = cfc.output_normalized;
-    float tripThreshold = cfc.tripThreshold;
-    float untripThreshold = cfc.untripThreshold;
-    boolean switchTripped = cfc.switchTripped;
-    float timeOfLastTrip = cfc.timeOfLastTrip;  
-  }
-  
-  //Channel 16 Event
-  public void analogEventChan15(Motor_Widget cfc){
-  
+
     float output_normalized = cfc.output_normalized;
     float tripThreshold = cfc.tripThreshold;
     float untripThreshold = cfc.untripThreshold;
     boolean switchTripped = cfc.switchTripped;
     float timeOfLastTrip = cfc.timeOfLastTrip;
   }
-  
+
+  //Channel 16 Event
+  public void analogEventChan15(Motor_Widget cfc){
+
+    float output_normalized = cfc.output_normalized;
+    float tripThreshold = cfc.tripThreshold;
+    float untripThreshold = cfc.untripThreshold;
+    boolean switchTripped = cfc.switchTripped;
+    float timeOfLastTrip = cfc.timeOfLastTrip;
+  }
+
 }
 
 //////////////////////////////////////
@@ -6545,13 +7310,14 @@ class TextBox {
 //fft constants
 int Nfft = 256; //set resolution of the FFT.  Use N=256 for normal, N=512 for MU waves
 FFT[] fftBuff = new FFT[nchan];    //from the minim library
+boolean isFFTFiltered = true; //yes by default ... this is used in dataProcessing.pde to determine which uV array feeds the FFT calculation
 
 ControlP5 cp5_FFT;
 List maxFreqList = Arrays.asList("20 Hz", "40 Hz", "60 Hz", "120 Hz");
 List logLinList = Arrays.asList("Log", "Linear");
 List vertScaleList = Arrays.asList("10 uV", "50 uV", "100 uV", "1000 uV");
 List smoothList = Arrays.asList("0.0", "0.5", "0.75", "0.9", "0.95", "0.98");
-List filterList = Arrays.asList("Unfilt.", "Filtered");
+List filterList = Arrays.asList("Filtered", "Unfilt.");
 
 CColor cp5_colors;
 
@@ -6591,13 +7357,12 @@ class FFT_Widget {
 
   int xLim = xLimOptions[2];  //maximum value of x axis ... in this case 20 Hz, 40 Hz, 60 Hz, 120 Hz
   int xMax = xLimOptions[3];
-  int FFT_indexLim = PApplet.parseInt(1.0f*xMax*(Nfft/openBCI.get_fs_Hz()));   // maxim value of FFT index
+  int FFT_indexLim = PApplet.parseInt(1.0f*xMax*(Nfft/get_fs_Hz_safe()));   // maxim value of FFT index
   int yLim = 100;  //maximum value of y axis ... 100 uV
 
 
   //constructor 1
   FFT_Widget(PApplet parent) {
-
     cp5_FFT = new ControlP5(parent);
 
     println("1");
@@ -6782,7 +7547,7 @@ class FFT_Widget {
 
     cp5_FFT.getController("UnfiltFilt")
       .getCaptionLabel()
-      .setText("Unfilt.")
+      .setText("Filtered")
       //.setFont(controlFonts[0])
       .setSize(12)
       .getStyle()
@@ -6792,14 +7557,13 @@ class FFT_Widget {
   }
 
   public void update() {
-
     //update the points of the FFT channel arrays
     //update fft point arrays
     for (int i = 0; i < fft_points.length; i++) {
       for (int j = 0; j < FFT_indexLim + 2; j++) {  //loop through frequency domain data, and store into points array
         //GPoint powerAtBin = new GPoint(j, 15*random(0.1*j));
 
-        GPoint powerAtBin = new GPoint((1.0f*openBCI.get_fs_Hz()/Nfft)*j, fftBuff[i].getBand(j));
+        GPoint powerAtBin = new GPoint((1.0f*get_fs_Hz_safe()/Nfft)*j, fftBuff[i].getBand(j));
         fft_points[i].set(j, powerAtBin);
         //println("=========================================");
         //println(j);
@@ -6939,7 +7703,7 @@ class FFT_Widget {
   public void mouseReleased() {
     //called by GUI_Widgets.pde
     if (mouseX >= x && mouseX <= x+w && mouseY >= y && mouseY <= y+h) {
-      println("fft_widget.mouseReleased()");
+      //println("fft_widget.mouseReleased()");
     }
   }
   //void keyPressed() {
@@ -7001,9 +7765,11 @@ public void Smoothing(int n) {
 //triggered when there is an event in the LogLin Dropdown
 public void UnfiltFilt(int n) {
   if (n==0) {
-    fft_widget.fft_plot.setLogScale("y");
+    //have FFT use filtered data -- default
+    isFFTFiltered = true;
   } else {
-    fft_widget.fft_plot.setLogScale("");
+    //have FFT use unfiltered data
+    isFFTFiltered = false;
   }
 }
 
@@ -7018,8 +7784,10 @@ public void setupGUIWidgets() {
   headPlot_widget = new HeadPlot_Widget(this);
   fft_widget = new FFT_Widget(this);
   Container motor_container = new Container(0.6f * width, 0.07f * height, 0.4f * width, 0.45f * height, 0);
+  Container accel_container = new Container(0.6f * width, 0.07f * height, 0.4f * width, 0.45f * height, 0);
 
   motorWidget = new EMG_Widget(nchan, openBCI.get_fs_Hz(), motor_container, this);
+   
 
 }
 
@@ -7064,6 +7832,281 @@ public void GUIWidgets_mouseReleased() {
 //  headPlot_widget.keyReleased();
 //  fft_widget.keyReleased();
 //}
+///////////////////////////////////////////////////////////////////////////////
+//
+// This class configures and manages the connection to the OpenBCI Ganglion.
+// The connection is implemented via a TCP connection to a TCP port.
+// The Gagnlion is configured using single letter text commands sent from the
+// PC to the TCP server.  The EEG data streams back from the Ganglion, to the
+// TCP server and back to the PC continuously (once started).
+//
+// Created: AJ Keller, August 2016
+//
+/////////////////////////////////////////////////////////////////////////////
+
+// import java.io.OutputStream; //for logging raw bytes to an output file
+
+//------------------------------------------------------------------------
+//                       Global Functions
+//------------------------------------------------------------------------
+
+public void clientEvent(Client someClient) {
+  // print("Server Says:  ");
+
+  int p = ganglion.tcpBufferPositon;
+  ganglion.tcpBuffer[p] = ganglion.tcpClient.readChar();
+  ganglion.tcpBufferPositon++;
+
+  if(p > 2) {
+    String posMatch  = new String(ganglion.tcpBuffer, p - 2, 3);
+    if (posMatch.equals(ganglion.TCP_STOP)) {
+      // Get a string from the tcp buffer
+      String msg = new String(ganglion.tcpBuffer, 0, p);
+      // Send the new string message to be processed
+      if(ganglion.parseMessage(msg)) {
+        controlPanel.bleBox.refreshBLEList();
+      }
+      // Reset the buffer position
+      ganglion.tcpBufferPositon = 0;
+    }
+  }
+
+  // background(dataIn);
+
+  // // get the "real" message =
+  // // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
+  // data = subset(data, 0, data.length-2);
+  // String message = new String( data );
+  //
+  // // Be safe, always check to make sure the parent did implement this function
+  // if (ganglion.udpRx.udpEventMethod != null) {
+  //   try {
+  //     ganglion.udpRx.udpEventMethod.invoke(ganglion.udpRx.parent, message);
+  //   }
+  //   catch (Exception e) {
+  //     System.err.println("Disabling udpEvent() for because of an error.");
+  //     e.printStackTrace();
+  //     ganglion.udpRx.udpEventMethod = null;
+  //   }
+  // }
+}
+
+class OpenBCI_Ganglion {
+  final static String TCP_CMD_CONNECT = "c";
+  final static String TCP_CMD_COMMAND = "k";
+  final static String TCP_CMD_DISCONNECT = "d";
+  final static String TCP_CMD_DATA= "t";
+  final static String TCP_CMD_ERROR = "e";
+  final static String TCP_CMD_LOG = "l";
+  final static String TCP_CMD_SCAN = "s";
+  final static String TCP_CMD_STATUS = "q";
+  final static String TCP_STOP = ",;\n";
+
+  final static byte BYTE_START = (byte)0xA0;
+  final static byte BYTE_END = (byte)0xC0;
+
+  // States For Syncing with the hardware
+  final static int STATE_NOCOM = 0;
+  final static int STATE_COMINIT = 1;
+  final static int STATE_SYNCWITHHARDWARE = 2;
+  final static int STATE_NORMAL = 3;
+  final static int STATE_STOPPED = 4;
+  final static int COM_INIT_MSEC = 3000; //you may need to vary this for your computer or your Arduino
+
+  final static int RESP_SUCCESS = 200;
+  final static int RESP_ERROR_BAD_PACKET = 500;
+
+  private int state = STATE_NOCOM;
+  int prevState_millis = 0; // Used for calculating connect time out
+
+  private int nEEGValuesPerPacket = 4; // Defined by the data format sent by openBCI boards
+  private int nAuxValuesPerPacket = 0; // Defined by the arduino code
+
+  private int tcpGanglionPort = 10996;
+  private String tcpGanglionIP = "127.0.0.1";
+
+  private final float fs_Hz = 200.0f;  //sample rate used by OpenBCI Ganglion board... set by its Arduino code
+  private final float MCP3912_Vref = 1.2f;  // reference voltage for ADC in MCP3912 set in hardware
+  private float MCP3912_gain = 1.0f;  //assumed gain setting for MCP3912.  NEEDS TO BE ADJUSTABLE JM
+  private float scale_fac_uVolts_per_count = (MCP3912_Vref * 1000000.f) / (8388607.0f * MCP3912_gain * 1.5f * 51.0f); //MCP3912 datasheet page 34. Gain of InAmp = 80
+  // private final float scale_fac_accel_G_per_count = 0.002 / ((float)pow(2,4));  //assume set to +/4G, so 2 mG per digit (datasheet). Account for 4 bits unused
+  // private final float leadOffDrive_amps = 6.0e-9;  //6 nA, set by its Arduino code
+
+  private int bleErrorCounter = 0;
+  private int prevSampleIndex = 0;
+
+  private DataPacket_ADS1299 dataPacket;
+
+  public Client tcpClient;
+  private boolean portIsOpen = false;
+  private boolean connected = false;
+
+  public String[] deviceList = new String[0];
+  public int numberOfDevices = 0;
+
+  public char[] tcpBuffer = new char[1024];
+  public int tcpBufferPositon = 0;
+
+  // Getters
+  public float get_fs_Hz() { return fs_Hz; }
+  public boolean isPortOpen() { return portIsOpen; }
+  public float get_scale_fac_uVolts_per_count() { return scale_fac_uVolts_per_count; }
+
+  //constructors
+  OpenBCI_Ganglion() {};  //only use this if you simply want access to some of the constants
+  OpenBCI_Ganglion(PApplet applet) {
+
+    // Initialize TCP connection
+    tcpClient = new Client(applet, tcpGanglionIP, tcpGanglionPort);
+
+    // For storing data into
+    dataPacket = new DataPacket_ADS1299(nEEGValuesPerPacket, nAuxValuesPerPacket);  //this should always be 8 channels
+    for(int i = 0; i < nEEGValuesPerPacket; i++) {
+      dataPacket.values[i] = 0;
+    }
+    for(int i = 0; i < nAuxValuesPerPacket; i++){
+      dataPacket.auxValues[i] = 0;
+    }
+  }
+
+  // Return true if the display needs to be updated for the BLE list
+  public boolean parseMessage(String msg) {
+    String[] list = split(msg, ',');
+    int index = 0;
+    switch (list[0].charAt(0)) {
+      case 'c': // Connect
+        if (isSuccessCode(Integer.parseInt(list[1]))) {
+          println("OpenBCI_Ganglion: parseMessage: connect: success!");
+          output("OpenBCI_Ganglion: The GUI is done intializing. Click outside of the control panel to interact with the GUI.");
+          systemMode = 10;
+          connected = true;
+        } else {
+          println("OpenBCI_Ganglion: parseMessage: connect: failure :(");
+          output("Unable to connect to ganglion!");
+          connected = false;
+        }
+        return false;
+      case 't': // Data
+        if (isSuccessCode(Integer.parseInt(list[1]))) {
+          // Sample number stuff
+          dataPacket.sampleIndex = PApplet.parseInt(Integer.parseInt(list[2]));
+          if ((dataPacket.sampleIndex - prevSampleIndex) != 1) {
+            if(dataPacket.sampleIndex != 0){  // if we rolled over, don't count as error
+              bleErrorCounter++;
+              println("OpenBCI_Ganglion: apparent sampleIndex jump from Serial data: " + prevSampleIndex + " to  " + dataPacket.sampleIndex + ".  Keeping packet. (" + bleErrorCounter + ")");
+            }
+          }
+          prevSampleIndex = dataPacket.sampleIndex;
+
+          // Channel data storage
+          for (int i = 0; i < 4; i++) {
+            dataPacket.values[i] = Integer.parseInt(list[3 + i]);
+          }
+          curDataPacketInd = (curDataPacketInd+1) % dataPacketBuff.length; //this is also used to let the rest of the code that it may be time to do something
+          ganglion.copyDataPacketTo(dataPacketBuff[curDataPacketInd]);  //resets isNewDataPacketAvailable to false
+          fileoutput.writeRawData_dataPacket(dataPacketBuff[curDataPacketInd], ganglion.get_scale_fac_uVolts_per_count(), 0);
+          newPacketCounter++;
+        } else {
+          bleErrorCounter++;
+          println("OpenBCI_Ganglion: parseMessage: data: bad");
+        }
+        return false;
+      case 'e': // Error
+        println("OpenBCI_Ganglion: parseMessage: error: " + list[2]);
+        return false;
+      case 's': // Scan
+        this.deviceList = new String[list.length - 3];
+        for (int i = 2; i < (list.length - 1); i++) {
+          // Last element has the stop command
+          this.deviceList[index] = list[i];
+          index++;
+        }
+        return true;
+      case 'l':
+        println("OpenBCI_Ganglion: Log: " + list[1]);
+        return false;
+      default:
+        println("OpenBCI_Ganglion: parseMessage: default: " + msg);
+        return false;
+    }
+  }
+
+  public int copyDataPacketTo(DataPacket_ADS1299 target) {
+    return dataPacket.copyTo(target);
+  }
+
+  public boolean isSuccessCode(int c) {
+    return c == RESP_SUCCESS;
+  }
+
+  public void getBLEDevices() {
+    deviceList = null;
+    tcpClient.write(TCP_CMD_SCAN + TCP_STOP);
+  }
+
+  public void connectBLE(String id) {
+    tcpClient.write(TCP_CMD_CONNECT + "," + id + TCP_STOP);
+  }
+
+  public void disconnectBLE() {
+    tcpClient.write(TCP_CMD_DISCONNECT + TCP_STOP);
+  }
+
+  public void updateSyncState() {
+    //has it been 3000 milliseconds since we initiated the serial port? We want to make sure we wait for the OpenBCI board to finish its setup()
+    if ((millis() - prevState_millis > COM_INIT_MSEC) && (prevState_millis != 0) && (state == openBCI.STATE_COMINIT) ) {
+      // We are synced and ready to go!
+      state = STATE_SYNCWITHHARDWARE;
+      println("OpenBCI_Ganglion: Sending reset command");
+      // serial_openBCI.write('v');
+    }
+  }
+
+  /**
+   * @description Sends a start streaming command to the Ganglion Node module.
+   */
+  public void startDataTransfer(){
+    changeState(STATE_NORMAL);  // make sure it's now interpretting as binary
+    println("OpenBCI_Ganglion: startDataTransfer(): sending \'" + command_startBinary);
+    tcpClient.write(TCP_CMD_COMMAND + "," + command_startBinary + TCP_STOP);
+  }
+
+  /**
+   * @description Sends a stop streaming command to the Ganglion Node module.
+   */
+  public void stopDataTransfer() {
+    changeState(STATE_STOPPED);  // make sure it's now interpretting as binary
+    println("OpenBCI_Ganglion: stopDataTransfer(): sending \'" + command_stop);
+    tcpClient.write(TCP_CMD_COMMAND + "," + command_stop + TCP_STOP);
+  }
+
+  private void printGanglion(String msg) {
+    print("OpenBCI_Ganglion: "); println(msg);
+  }
+
+  public int changeState(int newState) {
+    state = newState;
+    prevState_millis = millis();
+    return 0;
+  }
+
+  // Channel setting
+  //activate or deactivate an EEG channel...channel counting is zero through nchan-1
+  public void changeChannelState(int Ichan, boolean activate) {
+    if (connected) {
+      // if ((Ichan >= 0) && (Ichan < command_activate_channel.length)) {
+      if ((Ichan >= 0)) {
+        if (activate) {
+          // serial_openBCI.write(command_activate_channel[Ichan]);
+          gui.cc.powerUpChannel(Ichan);
+        } else {
+          // serial_openBCI.write(command_deactivate_channel[Ichan]);
+          gui.cc.powerDownChannel(Ichan);
+        }
+      }
+    }
+  }
+};
 
 ////////////////////////////////////////////////////
 //
@@ -7102,7 +8145,7 @@ int navBarHeight = 32;
 float default_vertScale_uV = 200.0f;  //used for vertical scale of time-domain montage plot and frequency-domain FFT plot
 float displayTime_sec = 5f;    //define how much time is shown on the time-domain montage plot (and how much is used in the FFT plot?)
 float dataBuff_len_sec = displayTime_sec + 3f; //needs to be wider than actual display so that filter startup is hidden
-PlaybackSlider playbackSlider = new PlaybackSlider();
+//PlaybackSlider playbackSlider = new PlaybackSlider();
 
 //------------------------------------------------------------------------
 //                       Global Functions
@@ -7206,6 +8249,7 @@ class GUI_Manager {
 
   public final static String stopButton_pressToStop_txt = "Stop Data Stream";
   public final static String stopButton_pressToStart_txt = "Start Data Stream";
+  PlaybackScrollbar scrollbar;
 
   GUI_Manager(PApplet parent,int win_x, int win_y,int nchan,float displayTime_sec, float default_yScale_uV,
     String filterDescription, float smooth_fac) {
@@ -7724,6 +8768,7 @@ class GUI_Manager {
     titleSpectrogram.alignH = CENTER;
   }
 
+///******CF START HERE TOMORROW**********/
   public void initializeMontageTraces(float[] dataBuffX, float [][] dataBuffY) {
 
     //create the trace object, add it to the  plotting object, and set the data and scale factor
@@ -7885,6 +8930,7 @@ class GUI_Manager {
         fmt = "%.2f";
       }
       return fmt;
+
   }
 
   public void draw() {
@@ -7904,8 +8950,108 @@ class GUI_Manager {
           chanValuesMontage[Ichan].draw();
         }
       }
+      if(has_processed){
+        if(scrollbar == null) scrollbar = new PlaybackScrollbar(10,height/20 * 19, width/2 - 10, 16, indices);
+        else {
+          float val_uV = 0.0f;
+          boolean foundIndex =true;
+          int startIndex = 0;
 
-      if(eegDataSource == DATASOURCE_PLAYBACKFILE) ; //draw playblack slider
+          scrollbar.update();
+          scrollbar.display();
+          //println(index_of_times.get(scrollbar.get_index()));
+          SimpleDateFormat format = new SimpleDateFormat("HH:mm:ss.SSS");
+          ArrayList<Date> keys_to_plot = new ArrayList();
+
+          try{
+            Date timeIndex = format.parse(index_of_times.get(scrollbar.get_index()));
+            Date fiveBefore = new Date(timeIndex.getTime());
+            fiveBefore.setTime(fiveBefore.getTime() - 5000);
+            Date fiveBeforeCopy = new Date(fiveBefore.getTime());
+            //println("Before: " + fiveBefore.getTime());
+            //println("Before Copy: " + fiveBeforeCopy.getTime());
+            //println("Time: " +timeIndex.getTime());
+            //println(index_of_times.get(44));
+            //println(format.format(fiveBefore));
+            //if(index_of_times.get(44).contains(format.format(fiveBefore).toString())) println("true");
+
+
+            //START HERE TOMORROW
+
+            int i = 0;
+            int timeToBreak = 0;
+            while(true){
+              //println("in while i:" + i);
+              if(index_of_times.get(i).contains(format.format(fiveBeforeCopy).toString())){
+                println("found");
+                startIndex = i;
+                break;
+              }
+              if(i == index_of_times.size() -1){
+                i = 0;
+                fiveBeforeCopy.setTime(fiveBefore.getTime() + 1);
+                timeToBreak++;
+              }
+              if(timeToBreak > 3){
+                break;
+              }
+              i++;
+
+            }
+            println("after first while");
+
+            while(fiveBefore.before(timeIndex)){
+             //println("in while :" + fiveBefore);
+              if(index_of_times.get(startIndex).contains(format.format(fiveBefore).toString())){
+                keys_to_plot.add(fiveBefore);
+                startIndex++;
+              }
+              //println(fiveBefore);
+              fiveBefore.setTime(fiveBefore.getTime() + 1);
+            }
+            println("keys_to_plot size: " + keys_to_plot.size());
+          }
+          catch(Exception e){}
+
+
+           //for (int Ichan=0; Ichan < nchan; Ichan++) {
+           // //append the new data to the larger data buffer...because we want the plotting routines
+           // //to show more than just the most recent chunk of data.  This will be our "raw" data.
+           // appendAndShift(dataBuffY_uV[Ichan], yLittleBuff_uV[Ichan]);
+
+           // //make a copy of the data that we'll apply processing to.  This will be what is displayed on the full montage
+           // dataBuffY_filtY_uV[Ichan] = dataBuffY_uV[Ichan].clone();
+           // }
+
+          float[][] data = new float[keys_to_plot.size()][nchan];
+          int i = 0;
+
+          for(Date elm : keys_to_plot){
+
+            for(int Ichan=0; Ichan < nchan; Ichan++){
+              val_uV = processed_file.get(elm)[Ichan][startIndex];
+
+
+              data[Ichan][i] = (int) (0.5f+ val_uV / openBCI.get_scale_fac_uVolts_per_count()); //convert to counts, the 0.5 is to ensure roundi
+            }
+            i++;
+          }
+
+          //println(keys_to_plot.size());
+          if(keys_to_plot.size() > 100){
+          for(int Ichan=0; Ichan<nchan; Ichan++){
+            update(data[Ichan],data_elec_imp_ohm);
+          }
+          }
+          //for(int index = 0; index <= scrollbar.get_index(); index++){
+          //  //yLittleBuff_uV = processed_file.get(index_of_times.get(index));
+
+          //}
+
+          cc.update();
+          cc.draw();
+        }
+      }
 
 
     } else {
@@ -8048,133 +9194,97 @@ class GUI_Manager {
 };
 
 //============= PLAYBACKSLIDER =============
-class PlaybackSlider {
-  //Fields
-  int lx, ly;
-  int boxx, boxy;
-  int stretch;
-  int wid;
-  int len;
-  boolean over;
-  boolean press;
-  boolean locked = false;
-  boolean otherslocked = false;
-  boolean drawHand;
-  TripSlider[] others;
-  int current_color = color(255,255,255);
-  Motor_Widget parent;
+class PlaybackScrollbar {
+  int swidth, sheight;    // width and height of bar
+  float xpos, ypos;       // x and y position of bar
+  float spos, newspos;    // x position of slider
+  float sposMin, sposMax; // max and min values of slider
+  boolean over;           // is the mouse over the slider?
+  boolean locked;
+  float ratio;
+  int num_indices;
 
-  //Constructor
-  PlaybackSlider(int ix, int iy, int il, int iwid, int ilen) {
-    lx = ix;
-    ly = iy;
-    stretch = il;
-    wid = iwid;
-    len = ilen;
-    boxx = lx - wid/2;
-    boxy = ly-stretch - len/2;
+  PlaybackScrollbar (float xp, float yp, int sw, int sh, int is) {
+    swidth = sw;
+    sheight = sh;
+    int widthtoheight = sw - sh;
+    ratio = (float)sw / (float)widthtoheight;
+    xpos = xp;
+    ypos = yp-sheight/2;
+    spos = xpos;
+    newspos = spos;
+    sposMin = xpos;
+    sposMax = xpos + swidth - sheight/2;
+    num_indices = is;
   }
 
-  //Called whenever thresholds are dragged
   public void update() {
-    boxx = lx - wid/2;
-    boxy = ly - stretch;
-
-    for (int i=0; i<others.length; i++) {
-      if (others[i].locked == true) {
-        otherslocked = true;
-        break;
-      } else {
-        otherslocked = false;
-      }
-    }
-
-    if (otherslocked == false) {
-      overEvent();
-      pressEvent();
-    }
-
-    if (press) {
-      //Some of this may need to be refactored in order to support window resizing.
-      if(trip) stretch = lock(ly -mouseY, PApplet.parseInt(parent.untripThreshold * (50 - len)), 50 - len);
-      else stretch = lock(ly -mouseY, 0, PApplet.parseInt(parent.tripThreshold * (50- len)));
-
-    }
-  }
-
-  //Checks if mouse is here
-  public void overEvent() {
-    if (overRect(boxx, boxy, wid, len)) {
+    if (overEvent()) {
       over = true;
     } else {
       over = false;
     }
-  }
-
-  //Checks if mouse is pressed
-  public void pressEvent() {
-    if (over && mousePressed || locked) {
-      press = true;
+    if (mousePressed && over) {
       locked = true;
-    } else {
-      press = false;
+    }
+    if (!mousePressed) {
+      locked = false;
+    }
+    if (locked) {
+      newspos = constrain(mouseX-sheight/2, sposMin, sposMax);
+    }
+    if (abs(newspos - spos) > 1) {
+      spos = spos + (newspos-spos);
     }
   }
 
-  //Mouse was released
-  public void releaseEvent() {
-    locked = false;
+  public float constrain(float val, float minv, float maxv) {
+    return min(max(val, minv), maxv);
   }
 
-  //Color selector and cursor setter
-  public void setColor(){
-    if(over) {
-      current_color = color(127,134,143);
-      if(!drawHand){
-        cursor(HAND);
-        drawHand = true;
-      }
-    }
-    else {
-      color(0,255,0);
-      if(drawHand){
-        cursor(ARROW);
-        drawHand = false;
-      }
-    }
-  }
-
-  //Helper function to make setting default threshold values easier.
-  //Expects a float as input (0.25 is 25%)
-  public void setStretchPercentage(float val){
-    stretch = lock(PApplet.parseInt((50 - len) * val), 0, 50 - len);
-  }
-
-  //Displays the thresholds
-  public void display() {
-    fill(255);
-    strokeWeight(0);
-    stroke(255);
-    setColor();
-    fill(current_color);
-    rect(boxx, boxy, wid, len);
-  }
-
-  //Check if the mouse is here
-  public boolean overRect(int lx, int ly, int lwidth, int lheight) {
-    if (mouseX >= lx && mouseX <= lx+lwidth &&
-        mouseY >= ly && mouseY <= ly+lheight) {
+  public boolean overEvent() {
+    if (mouseX > xpos && mouseX < xpos+swidth &&
+       mouseY > ypos && mouseY < ypos+sheight) {
+      cursor(HAND);
       return true;
     } else {
+      cursor(ARROW);
       return false;
     }
   }
 
-  //Locks the threshold in place
-  public int lock(int val, int minv, int maxv) {
-    return  min(max(val, minv), maxv);
+  public int get_index(){
+
+    float seperate_val = sposMax / num_indices;
+
+    int index;
+
+    for(index = 0; index < num_indices + 1; index++){
+      if(getPos() >= seperate_val * index && getPos() <= seperate_val * (index +1) ) return index;
+      else if(index == num_indices && getPos() >= seperate_val * index) return num_indices;
+    }
+
+    return -1;
   }
-}
+
+  public void display() {
+    noStroke();
+    fill(204);
+    rect(xpos, ypos, swidth, sheight);
+    if (over || locked) {
+      fill(0, 0, 0);
+    } else {
+      fill(102, 102, 102);
+    }
+    rect(spos, ypos, sheight/2, sheight);
+  }
+
+  public float getPos() {
+    // Convert spos to be values between
+    // 0 and the total width of the scrollbar
+    return spos * ratio;
+  }
+};
 ///////////////////////////////////////////////////////////////////////////////
 //
 // This class configures and manages the connection to the OpenBCI shield for
@@ -8235,8 +9345,8 @@ public void serialEvent(Serial port) {
   //check to see which serial port it is
   if (openBCI.isOpenBCISerial(port)) {
     // println("OpenBCI_GUI: serialEvent: millis = " + millis());
- 
-    // boolean echoBytes = !openBCI.isStateNormal(); 
+
+    // boolean echoBytes = !openBCI.isStateNormal();
     boolean echoBytes;
 
     if (openBCI.isStateNormal() != true) {  // || printingRegisters == true){
@@ -8251,7 +9361,7 @@ public void serialEvent(Serial port) {
       //copy packet into buffer of data packets
       curDataPacketInd = (curDataPacketInd+1) % dataPacketBuff.length; //this is also used to let the rest of the code that it may be time to do something
       openBCI.copyDataPacketTo(dataPacketBuff[curDataPacketInd]);  //resets isNewDataPacketAvailable to false
-      
+
       //If networking enabled --> send data every sample if 8 channels or every other sample if 16 channels
       if (networkType !=0){
         if (nchan==8){
@@ -8264,23 +9374,23 @@ public void serialEvent(Serial port) {
       newPacketCounter++;
     }
   } else {
-    
+
     //Used for serial communications, primarily everything in no_start_connection
     if(no_start_connection){
 
-      
+
       if(board_message == null || dollaBillz>2){ board_message = new StringBuilder(); dollaBillz = 0;}
-      
+
       inByte = PApplet.parseByte(port.read());
       if(PApplet.parseChar(inByte) == 'S' || PApplet.parseChar(inByte) == 'F') isOpenBCI = true;
-      
+
       //print(char(inByte));
-      if(inByte != -1){ 
+      if(inByte != -1){
         if(isGettingPoll){
           if(inByte != '$'){
             if(!spaceFound) board_message.append(PApplet.parseChar(inByte));
             else hexToInt = Integer.parseInt(String.format("%02X",inByte),16);
-            
+
             if(PApplet.parseChar(inByte) == ' ') spaceFound = true;
           }
           else dollaBillz++;
@@ -8290,31 +9400,31 @@ public void serialEvent(Serial port) {
           else dollaBillz++;
         }
       }
-      
-      
-      
-      
-      
+
+
+
+
+
     }
     else{
       //println("Recieved serial data not from OpenBCI"); //this is a bit of a lie
-      
-      
+
+
       inByte = PApplet.parseByte(port.read());
       if(isOpenBCI){
-        
+
         if(board_message == null || dollaBillz >2){board_message = new StringBuilder(); dollaBillz=0;}
-        
+
         if(inByte != '$') board_message.append(PApplet.parseChar(inByte));
         else dollaBillz++;
       }
       if(PApplet.parseChar(inByte) == 'S' || PApplet.parseChar(inByte) == 'F'){
         isOpenBCI = true;
-        if(board_message == null) board_message = new StringBuilder(); 
+        if(board_message == null) board_message = new StringBuilder();
         board_message.append(PApplet.parseChar(inByte));
-     
+
       }
-      
+
     }
   }
 }
@@ -8322,9 +9432,16 @@ public void serialEvent(Serial port) {
 public void startRunning() {
   verbosePrint("startRunning...");
   output("Data stream started.");
-  if ((eegDataSource == DATASOURCE_NORMAL) || (eegDataSource == DATASOURCE_NORMAL_W_AUX)) {
-    if (openBCI != null) openBCI.startDataTransfer();
+  if (eegDataSource == DATASOURCE_GANGLION) {
+    if (ganglion != null) {
+      ganglion.startDataTransfer();
+    }
+  } else {
+    if (openBCI != null) {
+      openBCI.startDataTransfer();
+    }
   }
+
   isRunning = true;
 }
 
@@ -8332,9 +9449,16 @@ public void stopRunning() {
   // openBCI.changeState(0); //make sure it's no longer interpretting as binary
   verbosePrint("OpenBCI_GUI: stopRunning: stop running...");
   output("Data stream stopped.");
-  if (openBCI != null) {
-    openBCI.stopDataTransfer();
+  if (eegDataSource == DATASOURCE_GANGLION) {
+    if (ganglion != null) {
+      ganglion.stopDataTransfer();
+    }
+  } else {
+    if (openBCI != null) {
+      openBCI.stopDataTransfer();
+    }
   }
+
   timeSinceStopRunning = millis(); //used as a timer to prevent misc. bytes from flooding serial...
   isRunning = false;
   // openBCI.changeState(0); //make sure it's no longer interpretting as binary
@@ -8402,6 +9526,9 @@ class OpenBCI_ADS1299 {
   //int nAuxValuesPerPacket = 3; //defined by the data format sent by openBCI boards
   private DataPacket_ADS1299 rawReceivedDataPacket;
   private DataPacket_ADS1299 dataPacket;
+  public int [] validAuxValues = {0,0,0};
+  public boolean[] freshAuxValuesAvailable = {false,false,false};
+  public boolean freshAuxValues = false;
   //DataPacket_ADS1299 prevDataPacket;
 
   private int nAuxValues;
@@ -8867,15 +9994,21 @@ class OpenBCI_ADS1299 {
         localAccelByteBuffer[localByteCounter] = actbyte;
         localByteCounter++;
         if (localByteCounter==2) {
-          rawReceivedDataPacket.auxValues[localChannelCounter]  = interpret16bitAsInt32(localAccelByteBuffer);
+         rawReceivedDataPacket.auxValues[localChannelCounter]  = interpret16bitAsInt32(localAccelByteBuffer);
+          if(rawReceivedDataPacket.auxValues[localChannelCounter] != 0){
+            validAuxValues[localChannelCounter] = rawReceivedDataPacket.auxValues[localChannelCounter]; 
+            freshAuxValuesAvailable[localChannelCounter] = true;
+            freshAuxValues = true;
+          }
+          else freshAuxValues = true;
           localChannelCounter++;
-          if (localChannelCounter==nAuxValues) { //number of accelerometer axis) {
+          if (localChannelCounter==nAuxValues) { //number of accelerometer axis) {  
             // all Accelerometer channels arrived !
             //println("OpenBCI_ADS1299: interpretBinaryStream: Accel Data: " + rawReceivedDataPacket.auxValues[0] + ", " + rawReceivedDataPacket.auxValues[1] + ", " + rawReceivedDataPacket.auxValues[2]);
             PACKET_readstate++;
             localByteCounter = 0;
             //isNewDataPacketAvailable = true;  //tell the rest of the code that the data packet is complete
-          } else {
+          } else { 
             //prepare for next data channel
             localByteCounter=0; //prepare for next usage of localByteCounter
           }
@@ -9664,7 +10797,7 @@ class HeadPlot_Widget {
       .setPosition(x+w-(dropdownWidth*(dropdownPos+1))-(2*(dropdownPos+1)), navHeight+(y+2)) //float right
       //.setSize(dropdownWidth, (maxFreqList.size()+1)*(navBarHeight-4))
       ;
-    //dropdownPos = 3;
+    //dropdownPos = 2;
     //cp5_HeadPlot.getController("NumChan")
     //  //.setPosition(w-(dropdownWidth*dropdownPos)-(2*(dropdownPos+1)), navHeight+(y+2)) // float left
     //  .setPosition(x+w-(dropdownWidth*(dropdownPos+1))-(2*(dropdownPos+1)), navHeight+(y+2)) //float right
@@ -9694,53 +10827,6 @@ class HeadPlot_Widget {
     headPlot.smooth_fac = fac;
   }
 
-  //triggered when there is an event in the Ten20 Dropdown
-  public void Ten20(int n) {
-    /* here an item is stored as a Map  with the following key-value pairs:
-     * name, the given name of the item
-     * text, the given text of the item by default the same as name
-     * value, the given value of the item, can be changed by using .getItem(n).put("value", "abc"); a value here is of type Object therefore can be anything
-     * color, the given color of the item, how to change, see below
-     * view, a customizable view, is of type CDrawable 
-     */
-
-    //fft_widget.fft_plot.setXLim(0.1, fft_widget.xLimOptions[n]); //update the xLim of the FFT_Plot
-    println("BOOOOM!" + n);
-  }
-
-  //triggered when there is an event in the Headset Dropdown
-  public void Headset(int n) {
-    //fft_widget.fft_plot.setYLim(0.1, fft_widget.yLimOptions[n]); //update the yLim of the FFT_Plot
-  }
-
-  //triggered when there is an event in the NumChan Dropdown
-  public void NumChan(int n) {
-    //if (n==0) {
-    //  fft_widget.fft_plot.setLogScale("y");
-    //} else {
-    //  fft_widget.fft_plot.setLogScale("");
-    //}
-  }
-
-  //triggered when there is an event in the Polarity Dropdown
-  public void Polarity(int n) {
-
-    if (n==0) {
-      headPlot_widget.headPlot.use_polarity = true;
-    } else {
-      headPlot_widget.headPlot.use_polarity = false;
-    }
-  }
-
-  //triggered when there is an event in the SmoothingHeadPlot Dropdown
-  public void SmoothingHeadPlot(int n) {
-    headPlot_widget.setSmoothFac(smoothFac[n]);
-  }
-
-  //triggered when there is an event in the UnfiltFiltHeadPlot Dropdown
-  public void UnfiltFiltHeadPlot(int n) {
-  }
-
   public void mousePressed() {
     //called by GUI_Widgets.pde
     if(mouseX >= x && mouseX <= x+w && mouseY >= y && mouseY <= y+h){
@@ -9749,7 +10835,7 @@ class HeadPlot_Widget {
   }
   public void mouseReleased() {
     //called by GUI_Widgets.pde
-    if(mouseX >= x && mouseX <= x+w && mouseY >= y && mouseY <= y+h){
+    if (mouseX >= x && mouseX <= x+w && mouseY >= y && mouseY <= y+h) {
       println("headPlot.mouseReleased()");
     }
   }
@@ -9761,7 +10847,52 @@ class HeadPlot_Widget {
   }
 };
 
+//triggered when there is an event in the Ten20 Dropdown
+public void Ten20(int n) {
+  /* here an item is stored as a Map  with the following key-value pairs:
+   * name, the given name of the item
+   * text, the given text of the item by default the same as name
+   * value, the given value of the item, can be changed by using .getItem(n).put("value", "abc"); a value here is of type Object therefore can be anything
+   * color, the given color of the item, how to change, see below
+   * view, a customizable view, is of type CDrawable 
+   */
 
+  //fft_widget.fft_plot.setXLim(0.1, fft_widget.xLimOptions[n]); //update the xLim of the FFT_Plot
+  println("BOOOOM!" + n);
+}
+
+//triggered when there is an event in the Headset Dropdown
+public void Headset(int n) {
+  //fft_widget.fft_plot.setYLim(0.1, fft_widget.yLimOptions[n]); //update the yLim of the FFT_Plot
+}
+
+//triggered when there is an event in the NumChan Dropdown
+public void NumChan(int n) {
+  //if (n==0) {
+  //  fft_widget.fft_plot.setLogScale("y");
+  //} else {
+  //  fft_widget.fft_plot.setLogScale("");
+  //}
+}
+
+//triggered when there is an event in the Polarity Dropdown
+public void Polarity(int n) {
+
+  if (n==0) {
+    headPlot_widget.headPlot.use_polarity = true;
+  } else {
+    headPlot_widget.headPlot.use_polarity = false;
+  }
+}
+
+//triggered when there is an event in the SmoothingHeadPlot Dropdown
+public void SmoothingHeadPlot(int n) {
+  headPlot_widget.setSmoothFac(smoothFac[n]);
+}
+
+//triggered when there is an event in the UnfiltFiltHeadPlot Dropdown
+public void UnfiltFiltHeadPlot(int n) {
+}
 
 
 
@@ -10903,9 +12034,9 @@ class HeadPlot {
 //interpret a keypress...the key pressed comes in as "key"
 public void keyPressed() {
   //note that the Processing variable "key" is the keypress as an ASCII character
-  //note that the Processing variable "keyCode" is the keypress as a JAVA keycode.  This differs from ASCII  
+  //note that the Processing variable "keyCode" is the keypress as a JAVA keycode.  This differs from ASCII
   //println("OpenBCI_GUI: keyPressed: key = " + key + ", int(key) = " + int(key) + ", keyCode = " + keyCode);
-  
+
   if(!controlPanel.isOpen){ //don't parse the key if the control panel is open
     if ((PApplet.parseInt(key) >=32) && (PApplet.parseInt(key) <= 126)) {  //32 through 126 represent all the usual printable ASCII characters
       parseKey(key);
@@ -10913,7 +12044,7 @@ public void keyPressed() {
       parseKeycode(keyCode);
     }
   }
-  
+
   if(key==27){
     key=0; //disable 'esc' quitting program
   }
@@ -10921,81 +12052,85 @@ public void keyPressed() {
 
 public void parseKey(char val) {
   int Ichan; boolean activate; int code_P_N_Both;
-  
+
   //assumes that val is a usual printable ASCII character (ASCII 32 through 126)
   switch (val) {
     case '.':
-      drawEMG = !drawEMG; 
+      drawEMG = !drawEMG;
       break;
     case ',':
-      drawContainers = !drawContainers; 
+      drawContainers = !drawContainers;
+      break;
+    case '/':
+      drawAccel = !drawAccel;
+      drawPulse = !drawPulse;
       break;
     case '1':
-      deactivateChannel(1-1); 
+      deactivateChannel(1-1);
       break;
     case '2':
-      deactivateChannel(2-1); 
+      deactivateChannel(2-1);
       break;
     case '3':
-      deactivateChannel(3-1); 
+      deactivateChannel(3-1);
       break;
     case '4':
-      deactivateChannel(4-1); 
+      deactivateChannel(4-1);
       break;
     case '5':
-      deactivateChannel(5-1); 
+      deactivateChannel(5-1);
       break;
     case '6':
-      deactivateChannel(6-1); 
+      deactivateChannel(6-1);
       break;
     case '7':
-      deactivateChannel(7-1); 
+      deactivateChannel(7-1);
       break;
     case '8':
-      deactivateChannel(8-1); 
+      deactivateChannel(8-1);
       break;
 
     case 'q':
       if(nchan == 16){
-        deactivateChannel(9-1); 
+        deactivateChannel(9-1);
       }
       break;
     case 'w':
       if(nchan == 16){
-        deactivateChannel(10-1); 
+        deactivateChannel(10-1);
       }
       break;
     case 'e':
       if(nchan == 16){
-        deactivateChannel(11-1); 
+        deactivateChannel(11-1);
       }
       break;
     case 'r':
       if(nchan == 16){
-        deactivateChannel(12-1); 
+        deactivateChannel(12-1);
       }
       break;
     case 't':
       if(nchan == 16){
-        deactivateChannel(13-1); 
+        deactivateChannel(13-1);
       }
       break;
     case 'y':
       if(nchan == 16){
-        deactivateChannel(14-1); 
+        deactivateChannel(14-1);
       }
       break;
     case 'u':
       if(nchan == 16){
-        deactivateChannel(15-1); 
+        deactivateChannel(15-1);
       }
       break;
     case 'i':
       if(nchan == 16){
-        deactivateChannel(16-1); 
+        deactivateChannel(16-1);
       }
       break;
-      
+
     //activate channels 1-8
     case '!':
       activateChannel(1-1);
@@ -11021,7 +12156,7 @@ public void parseKey(char val) {
     case '*':
       activateChannel(8-1);
       break;
-      
+
     //activate channels 9-16 (DAISY MODE ONLY)
     case 'Q':
       if(nchan == 16){
@@ -11089,7 +12224,7 @@ public void parseKey(char val) {
       //openBCI.serial_openBCI.write('d');
       openBCI.configureAllChannelsToDefault();
       break;
-      
+
     // //change the state of the impedance measurements...activate the N-channels
     // case 'A':
     //   Ichan = 1; activate = true; code_P_N_Both = 1;  setChannelImpedanceState(Ichan-1,activate,code_P_N_Both);
@@ -11115,7 +12250,7 @@ public void parseKey(char val) {
     // case 'K':
     //   Ichan = 8; activate = true; code_P_N_Both = 1;  setChannelImpedanceState(Ichan-1,activate,code_P_N_Both);
     //   break;
-      
+
     // //change the state of the impedance measurements...deactivate the N-channels
     // case 'Z':
     //   Ichan = 1; activate = false; code_P_N_Both = 1;  setChannelImpedanceState(Ichan-1,activate,code_P_N_Both);
@@ -11142,7 +12277,7 @@ public void parseKey(char val) {
     //   Ichan = 8; activate = false; code_P_N_Both = 1;  setChannelImpedanceState(Ichan-1,activate,code_P_N_Both);
     //   break;
 
-      
+
     case 'm':
      String picfname = "OpenBCI-" + getDateString() + ".jpg";
      println("OpenBCI_GUI: 'm' was pressed...taking screenshot:" + picfname);
@@ -11154,22 +12289,22 @@ public void parseKey(char val) {
      // if (openBCI.serial_openBCI != null) openBCI.serial_openBCI.write(key);//send the value as ascii with a newline character
      //if (openBCI.serial_openBCI != null) openBCI.serial_openBCI.write(key);//send the value as ascii with a newline character
      openBCI.sendChar(key);
-    
+
      break;
   }
 }
 
-public void parseKeycode(int val) { 
+public void parseKeycode(int val) {
   //assumes that val is Java keyCode
   switch (val) {
     case 8:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received BACKSPACE keypress.  Ignoring...");
-      break;   
+      break;
     case 9:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received TAB keypress.  Ignoring...");
       //gui.showImpedanceButtons = !gui.showImpedanceButtons;
       // gui.incrementGUIpage(); //deprecated with new channel controller
-      break;    
+      break;
     case 10:
       println("Entering Presentation Mode");
       drawPresentation = !drawPresentation;
@@ -11189,19 +12324,19 @@ public void parseKeycode(int val) {
     case 27:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received ESC keypress.  Stopping OpenBCI...");
       //stopRunning();
-      break; 
+      break;
     case 33:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received PAGE UP keypress.  Ignoring...");
-      break;    
+      break;
     case 34:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received PAGE DOWN keypress.  Ignoring...");
       break;
     case 35:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received END keypress.  Ignoring...");
-      break; 
+      break;
     case 36:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received HOME keypress.  Ignoring...");
-      break; 
+      break;
     case 37:
       println("Slide Back!");
       if (millis() - myPresentation.timeOfLastSlideChange >= 250) {
@@ -11210,11 +12345,11 @@ public void parseKeycode(int val) {
           myPresentation.timeOfLastSlideChange = millis();
         }
       }
-      break;  
+      break;
     case 38:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received UP ARROW keypress.  Ignoring...");
       dataProcessing_user.switchesActive = true;
-      break;  
+      break;
     case 39:
       println("Forward!");
       if (millis() - myPresentation.timeOfLastSlideChange >= 250) {
@@ -11223,7 +12358,7 @@ public void parseKeycode(int val) {
           myPresentation.timeOfLastSlideChange = millis();
         }
       }
-      break;  
+      break;
     case 40:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received DOWN ARROW keypress.  Ignoring...");
       dataProcessing_user.switchesActive = false;
@@ -11233,43 +12368,43 @@ public void parseKeycode(int val) {
       break;
     case 113:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received F2 keypress.  Ignoring...");
-      break;  
+      break;
     case 114:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received F3 keypress.  Ignoring...");
-      break;  
+      break;
     case 115:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received F4 keypress.  Ignoring...");
-      break;  
+      break;
     case 116:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received F5 keypress.  Ignoring...");
-      break;  
+      break;
     case 117:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received F6 keypress.  Ignoring...");
-      break;  
+      break;
     case 118:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received F7 keypress.  Ignoring...");
-      break;  
+      break;
     case 119:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received F8 keypress.  Ignoring...");
-      break;  
+      break;
     case 120:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received F9 keypress.  Ignoring...");
-      break;  
+      break;
     case 121:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received F10 keypress.  Ignoring...");
-      break;  
+      break;
     case 122:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received F11 keypress.  Ignoring...");
-      break;  
+      break;
     case 123:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received F12 keypress.  Ignoring...");
-      break;     
+      break;
     case 127:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received DELETE keypress.  Ignoring...");
       break;
     case 155:
       println("OpenBCI_GUI: parseKeycode(" + val + "): received INSERT keypress.  Ignoring...");
-      break; 
+      break;
     default:
       println("OpenBCI_GUI: parseKeycode(" + val + "): value is not known.  Ignoring...");
       break;
@@ -11292,10 +12427,10 @@ public void mousePressed() {
       gui.mousePressed(); // trigger mousePressed function in GUI
 
       GUIWidgets_mousePressed(); // to replace GUI_Manager version (above) soon... cdr 7/25/16
-      
+
       //most of the logic below should be migrated into the GUI_Manager specific function above
 
-      if (gui.stopButton.isMouseHere()) { 
+      if (gui.stopButton.isMouseHere()) {
         gui.stopButton.setIsActive(true);
         stopButtonWasPressed();
       }
@@ -11311,13 +12446,13 @@ public void mousePressed() {
       case GUI_Manager.GUI_PAGE_CHANNEL_ONOFF:
         //check the channel buttons
         // for (int Ibut = 0; Ibut < gui.chanButtons.length; Ibut++) {
-        //   if (gui.chanButtons[Ibut].isMouseHere()) { 
+        //   if (gui.chanButtons[Ibut].isMouseHere()) {
         //     toggleChannelState(Ibut);
         //   }
         // }
 
         //check the detection button
-        //if (gui.detectButton.updateIsMouseHere()) toggleDetectionState();      
+        //if (gui.detectButton.updateIsMouseHere()) toggleDetectionState();
         //check spectrogram button
         //if (gui.spectrogramButton.updateIsMouseHere()) toggleSpectrogramState();
 
@@ -11326,17 +12461,17 @@ public void mousePressed() {
         // ============ DEPRECATED ============== //
         // //check the impedance buttons
         // for (int Ibut = 0; Ibut < gui.impedanceButtonsP.length; Ibut++) {
-        //   if (gui.impedanceButtonsP[Ibut].isMouseHere()) { 
+        //   if (gui.impedanceButtonsP[Ibut].isMouseHere()) {
         //     toggleChannelImpedanceState(gui.impedanceButtonsP[Ibut],Ibut,0);
         //   }
-        //   if (gui.impedanceButtonsN[Ibut].isMouseHere()) { 
+        //   if (gui.impedanceButtonsN[Ibut].isMouseHere()) {
         //     toggleChannelImpedanceState(gui.impedanceButtonsN[Ibut],Ibut,1);
         //   }
         // }
-        // if (gui.biasButton.isMouseHere()) { 
+        // if (gui.biasButton.isMouseHere()) {
         //   gui.biasButton.setIsActive(true);
         //   setBiasState(!openBCI.isBiasAuto);
-        // }      
+        // }
         // break;
       case GUI_Manager.GUI_PAGE_HEADPLOT_SETUP:
         if (gui.intensityFactorButton.isMouseHere()) {
@@ -11432,6 +12567,22 @@ public void mousePressed() {
   if (playground.isMouseInButton()) {
     playground.toggleWindow();
   }
+  
+  if (accelWidget.isMouseHere()) {
+    accelWidget.mousePressed();
+  }
+
+  if (accelWidget.isMouseInButton()) {
+    accelWidget.toggleWindow();
+  }
+  
+  if (pulseWidget.isMouseHere()) {
+    pulseWidget.mousePressed();
+  }
+
+  if (pulseWidget.isMouseInButton()) {
+    pulseWidget.toggleWindow();
+  }
 }
 
 public void mouseReleased() {
@@ -11451,7 +12602,7 @@ public void mouseReleased() {
 
     gui.mouseReleased();
     GUIWidgets_mouseReleased(); // to replace GUI_Manager version (above) soon... cdr 7/25/16
-    
+
     redrawScreenNow = true;  //command a redraw of the GUI whenever the mouse is released
   }
 
@@ -11486,13 +12637,13 @@ public void incrementSmoothing() {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// 
+//
 // Formerly Button.pde
 // This class creates and manages a button for use on the screen to trigger actions.
 //
 // Created: Chip Audette, Oct 2013.
 // Modified: Conor Russomanno, Oct 2014
-// 
+//
 // Based on Processing's "Button" example code
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -11503,7 +12654,7 @@ class Button {
   //int rectSize = 90;     // Diameter of rect
 
   int currentColor;
-  int color_hover = color(127, 134, 143);//color(252, 221, 198); 
+  int color_hover = color(127, 134, 143);//color(252, 221, 198);
   int color_pressed = color(150,170,200); //bgColor;
   int color_highlight = color(102);
   int color_notPressed = color(255); //color(227,118,37);
@@ -11568,14 +12719,14 @@ class Button {
      currentColor = color_pressed;
     } else if (isMouseHere()) {
      currentColor = color_hover;
-    } else {    
+    } else {
      currentColor = color_notPressed;
     }
     return currentColor;
   }
-  
+
   public void setCurrentColor(int _color){
-    currentColor = _color; 
+    currentColor = _color;
   }
 
   public void setColorPressed(int _color) {
@@ -11594,7 +12745,7 @@ class Button {
   }
 
   public boolean overRect(int x, int y, int width, int height) {
-    if (mouseX >= x && mouseX <= x+width && 
+    if (mouseX >= x && mouseX <= x+width &&
       mouseY >= y && mouseY <= y+height) {
       return true;
     } else {
@@ -11626,7 +12777,7 @@ class Button {
       fill(textColorNotActive);
     }
     stroke(255);
-    textFont(buttonFont);  //load f2 ... from control panel 
+    textFont(buttonFont);  //load f2 ... from control panel
     textSize(12);
     textAlign(CENTER, CENTER);
     textLeading(round(0.9f*(textAscent()+textDescent())));
@@ -11670,13 +12821,13 @@ class Button {
       if (!isMouseHere() && drawHand) {
         cursor(ARROW);
         drawHand = false;
-        verbosePrint("don't draw hand");
+        //verbosePrint("don't draw hand");
       }
       //if cursor is over button change cursor icon to hand!
       if (isMouseHere() && !drawHand) {
         cursor(HAND);
         drawHand = true;
-        verbosePrint("draw hand");
+        //verbosePrint("draw hand");
       }
     }
   }
@@ -11684,7 +12835,7 @@ class Button {
 //////////////////////////////////////////////////////////////////////////
 //
 //    Networking
-//    - responsible for sending data over a Network 
+//    - responsible for sending data over a Network
 //    - Three types of networks are available:
 //        - UDP
 //        - OSC
@@ -11695,6 +12846,7 @@ class Button {
 //      the data stream in those networks.
 //
 //////////////////////////////////////////////////////////////////////////
+
 float[] data_to_send;
 float[] aux_to_send;
 float[] full_message;
@@ -11702,20 +12854,20 @@ float[] full_message;
 public void sendRawData_dataPacket(DataPacket_ADS1299 data, float scale_to_uV, float scale_for_aux) {
   data_to_send = writeValues(data.values,scale_to_uV);
   aux_to_send = writeValues(data.auxValues,scale_for_aux);
-  
+
   full_message = compressArray(data);     //Collect packet into full_message array
-  
+
   //send to appropriate network type
   if (networkType == 1){
     udp.send_message(data_to_send);       //Send full message to udp
   }else if (networkType == 2){
     osc.send_message(data_to_send);       //Send full message to osc
   }else if (networkType == 3){
-    lsl.send_message(data_to_send,aux_to_send);       //Send 
+    lsl.send_message(data_to_send,aux_to_send);       //Send
   }
 }
 // Convert counts to scientific values (uV or G)
-private float[] writeValues(int[] values, float scale_fac) {          
+private float[] writeValues(int[] values, float scale_fac) {
   int nVal = values.length;
   float[] temp_buffer = new float[nVal];
   for (int Ival = 0; Ival < nVal; Ival++) {
@@ -11740,12 +12892,109 @@ private float[] compressArray(DataPacket_ADS1299 data){
 //////////////
 // CLASSES //
 
+/**
+ * To perform any action on datagram reception, you need to implement this
+ * handler in your code. This method will be automatically called by the UDP
+ * object each time he receive a nonnull message. This method will send the
+ * message to `udpEvent`
+ */
+// void receive(byte[] data, String ip, int port) {	// <-- extended handler
+//   // get the "real" message =
+//   // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
+//   data = subset(data, 0, data.length-2);
+//   String message = new String( data );
+//
+//   // Be safe, always check to make sure the parent did implement this function
+//   if (ganglion.udpRx.udpEventMethod != null) {
+//     try {
+//       ganglion.udpRx.udpEventMethod.invoke(ganglion.udpRx.parent, message);
+//     }
+//     catch (Exception e) {
+//       System.err.println("Disabling udpEvent() for because of an error.");
+//       e.printStackTrace();
+//       ganglion.udpRx.udpEventMethod = null;
+//     }
+//   }
+// }
+
+// void clientEvent(Client someClient) {
+//   print("Server Says:  ");
+//   dataIn = myClient.read();
+//   println(dataIn);
+//   background(dataIn);
+//
+//   // get the "real" message =
+//   // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
+//   data = subset(data, 0, data.length-2);
+//   String message = new String( data );
+//
+//   // Be safe, always check to make sure the parent did implement this function
+//   if (ganglion.udpRx.udpEventMethod != null) {
+//     try {
+//       ganglion.udpRx.udpEventMethod.invoke(ganglion.udpRx.parent, message);
+//     }
+//     catch (Exception e) {
+//       System.err.println("Disabling udpEvent() for because of an error.");
+//       e.printStackTrace();
+//       ganglion.udpRx.udpEventMethod = null;
+//     }
+//   }
+//
+// }
+
+class UDPReceive {
+  public Method udpEventMethod;
+  public PApplet parent;
+  int port;
+  String ip;
+  boolean listen;
+  UDP udp;
+
+  /**
+   * @description Used to construct a new UDP connection
+   * @param `parent` {PApplet} - The object calling constructor. Implements
+   *  `udpEvent` if `parent` wants to recieve messages.
+   * @param `port` {int} - The port number to use for the UDP port
+   * @param `ip` {String} - The ip address for the UDP connection. Use `localhost`
+   *  to keep the port on this computer.
+   * @constructor
+   */
+  public UDPReceive(PApplet parent, int port, String ip) {
+    // Grab vars
+    this.port  = port;
+    this.ip = ip;
+
+    this.udp = new UDP(parent, port);
+    println("udp bound to " + port);
+    this.udp.setBuffer(1024);
+    this.udp.log(false);
+    this.udp.listen(true);
+
+    // callback: https://forum.processing.org/one/topic/noob-q-i-d-like-to-learn-more-about-callbacks.html
+    // Set parent for callback
+    this.parent = parent;
+
+    // Verify that parent actaully implements the callback
+    try {
+      this.udpEventMethod = this.parent.getClass().getMethod("udpEvent", new Class[] { String.class });
+      println("Networking: Good job iplmenting udpEvent callback in parent " + parent);
+    }
+    catch (Exception e) {
+      // No such method declared, there for the parent who created this will not
+      //  recieve messages :(
+      println("Networking: Error failed to implement udpEvent callback in parent " + this.parent);
+      this.udp.listen(false);
+    }
+
+  }
+}
+
 // UDP SEND //
-class UDPSend{
+class UDPSend {
   int port;
   String ip;
   UDP udp;
-  
+
   UDPSend(int _port, String _ip){
     port = _port;
     ip = _ip;
@@ -11757,6 +13006,10 @@ class UDPSend{
     String message = Arrays.toString(_message);
     udp.send(message,ip,port);
   }
+
+  public void send(String msg){
+    udp.send(msg,ip,port);
+  }
 }
 
 // OSC SEND //
@@ -11766,7 +13019,7 @@ class OSCSend{
   String address;
   OscP5 osc;
   NetAddress netaddress;
-  
+
   OSCSend(int _port, String _ip, String _address){
     port = _port;
     ip = _ip;
@@ -11791,7 +13044,7 @@ class LSLSend{
   LSL.StreamOutlet outlet_data;
   LSL.StreamInfo info_aux;
   LSL.StreamOutlet outlet_aux;
-  
+
   LSLSend(String _data_stream, String _aux_stream){
     data_stream = _data_stream;
     data_stream_id = data_stream + "_id";
@@ -11807,7 +13060,6 @@ class LSLSend{
     //outlet_aux.push_sample(_aux_message);
   }
 }
-  
 //////////////////////////////////////////////////////////////////////////
 //
 //		Playground Class
@@ -11868,6 +13120,12 @@ class Playground {
     } else {
       expand();
     }
+    
+    if(accelWidget.collapsing) accelWidget.collapse();
+    else accelWidget.expand();
+    
+    if(pulseWidget.collapsing) pulseWidget.collapse();
+    else pulseWidget.expand();
 
     if (x > width) {
       x = width;
@@ -11885,7 +13143,8 @@ class Playground {
     fill(bgColor);
     text("Developer Playground", x + 10, y + 10);
     fill(255, 0, 0);
-    collapser.draw(PApplet.parseInt(x - collapser.but_dx), PApplet.parseInt(topMargin + (h-collapser.but_dy)/2));
+    //uncomment if you want the dev playground to display again
+    //collapser.draw(int(x - collapser.but_dx), int(topMargin + (h-collapser.but_dy)/2));
     popStyle();
   }
 
@@ -11898,7 +13157,7 @@ class Playground {
   }
 
   public boolean isMouseInButton() {
-    verbosePrint("Playground: isMouseInButton: attempting");
+    //verbosePrint("Playground: isMouseInButton: attempting");
     if (mouseX >= collapser.but_x && mouseX <= collapser.but_x+collapser.but_dx && mouseY >= collapser.but_y && mouseY <= collapser.but_y + collapser.but_dy) {
       return true;
     } else {
@@ -11907,25 +13166,57 @@ class Playground {
   }
 
   public void toggleWindow() {
-    if (isOpen) {//if open
-      verbosePrint("close");
-      collapsing = true;//collapsing = true;
-      isOpen = false;
-      collapser.but_txt = "<";
-    } else {//if closed
-      verbosePrint("open");
-      collapsing = false;//expanding = true;
-      isOpen = true;
-      collapser.but_txt = ">";
+    
+    //Uncomment if you'd like to open the playground
+    //if (isOpen) {//if open
+    //  verbosePrint("close");
+    //  collapsing = true;//collapsing = true;
+    //  isOpen = false;
+    //  collapser.but_txt = "<";
+    //} else {//if closed
+    //  verbosePrint("open");
+    //  collapsing = false;//expanding = true;
+    //  isOpen = true;
+    //  collapser.but_txt = ">";
+    //}
+    
+    if(drawAccel){
+      if (accelWidget.isOpen) {//if open
+        verbosePrint("close");
+        accelWidget.collapsing = true;//collapsing = true;
+        accelWidget.isOpen = false;
+        accelWidget.collapser.but_txt = "<";
+      } else {//if closed
+        verbosePrint("open");
+        accelWidget.collapsing = false;//expanding = true;
+        accelWidget.isOpen = true;
+        accelWidget.collapser.but_txt = ">";
+      }
+    }
+    
+    else if(drawPulse){
+      if (pulseWidget.isOpen) {//if open
+        verbosePrint("close");
+        pulseWidget.collapsing = true;//collapsing = true;
+        pulseWidget.isOpen = false;
+        pulseWidget.collapser.but_txt = "<";
+      } else {//if closed
+        verbosePrint("open");
+        pulseWidget.collapsing = false;//expanding = true;
+        pulseWidget.isOpen = true;
+        pulseWidget.collapser.but_txt = ">";
+      }
+    
+    
     }
   }
 
   public void mousePressed() {
-    verbosePrint("Playground >> mousePressed()");
+    //verbosePrint("Playground >> mousePressed()");
   }
 
   public void mouseReleased() {
-    verbosePrint("Playground >> mouseReleased()");
+    //verbosePrint("Playground >> mouseReleased()");
   }
 
   public void expand() {
@@ -12058,6 +13349,226 @@ class Presentation {
       fill(255,0,0);
       rect(width - 50, 25, 25, 25);
       popStyle();
+    }
+  }
+}
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  PulseSensor_Widget is used to visiualze heartbeat data using a pulse sensor
+//
+//  Created: Colin Fausnaught, September 2016
+//           Source Code by Joel Murphy
+//
+//  Use '/' to toggle between accelerometer and pulse sensor.
+////////////////////////////////////////////////////////////////////////////////
+
+class PulseSensor_Widget extends Playground{
+
+  //button for opening and closing
+  float x, y, w, h;
+  int boxBG;
+  int strokeColor;
+  
+  float topMargin, bottomMargin;
+  float expandLimit = width/2.5f;
+  boolean isOpen;
+  boolean collapsing;
+  
+// Pulse Sensor Stuff
+  int count = 0;
+  int heart = 0;
+  int PulseWindowWidth;
+  int PulseWindowHeight; 
+  int PulseWindowX;
+  int PulseWindowY;
+  int eggshell;
+  int[] PulseWaveY;      // HOLDS HEARTBEAT WAVEFORM DATA
+  boolean rising;
+  boolean OBCI_inited= false;
+  
+  OpenBCI_ADS1299 OBCI;
+  
+  Button collapser;
+
+  PulseSensor_Widget(int _topMargin) {
+    super(_topMargin);
+    topMargin = _topMargin;
+    bottomMargin = helpWidget.h;
+
+    isOpen = false;
+    collapsing = true;
+
+    boxBG = bgColor;
+    strokeColor = color(138, 146, 153);
+    collapser = new Button(0, 0, 20, 60, "<", 14);
+
+    x = width;
+    y = topMargin;
+    w = 0;
+    h = (height - (topMargin+bottomMargin))/2;
+    
+// Pulse Sensor Stuff
+    eggshell = color(255, 253, 248);
+    PulseWindowWidth = 440;
+    PulseWindowHeight = 183;
+    PulseWindowX = PApplet.parseInt(x)+5;
+    PulseWindowY = PApplet.parseInt(y)-10+PApplet.parseInt(h)/2;
+    PulseWaveY = new int[PulseWindowWidth];
+    rising = true;
+    for (int i=0; i<PulseWaveY.length; i++){
+      PulseWaveY[i] = PulseWindowY + PulseWindowHeight/2; // initialize the pulse window data line to V/2
+   }
+    
+  }
+  
+  public void initPlayground(OpenBCI_ADS1299 _OBCI){
+    OBCI = _OBCI;
+    OBCI_inited = true;
+  }
+
+  public void update() {
+    // verbosePrint("uh huh");
+    if (collapsing) {
+      collapse();
+    } else {
+      expand();
+    }
+
+    if (x > width) {
+      x = width;
+    }
+  }
+
+  public void draw() {
+    // verbosePrint("yeaaa");
+  if(OBCI_inited){
+    if(drawPulse){
+      pushStyle();
+      fill(boxBG);
+      stroke(strokeColor);
+      rect(width - w, topMargin, w, h);
+      textFont(f2,24);
+      textAlign(LEFT, TOP);
+      fill(eggshell);
+      text("Pulse Sensor Amped", x + 10, y + 10);
+      textFont(f2,50);
+      if(synthesizeData){
+        text("BPM " + count, x+10, y+40);
+        text("IBI 760", x+10, y+100);
+        count++;
+        //text("Width "+ w, x+10, y+50);
+        //text("Height "+ h, x+10, y+70);
+      }else{
+        text("BPM " + OBCI.validAuxValues[1], x+10, y+40);
+        text("IBI " + OBCI.validAuxValues[2], x+10, y+100);
+      }
+      fill(250,0,0);
+      stroke(250,0,0);
+      if(frameCount%60 == 0){ heart = 15; }  // fake the beat for now
+      if(OBCI.freshAuxValues){ heart = 4; }
+      heart--;                    // heart is used to time how long the heart graphic swells when your heart beats
+      heart = max(heart,0);       // don't let the heart variable go into negative numbers
+      strokeWeight(1);
+      if (heart > 0){             // if a beat happened recently, 
+      strokeWeight(8);          // make the heart pulse
+      }
+      smooth();   // draw the heart with two bezier curves
+      bezier(x+expandLimit-60,y+40, x+expandLimit+20,y-30, x+expandLimit+40,y+130, x+expandLimit-60,y+140);
+      bezier(x+expandLimit-60,y+40, x+expandLimit-150,y-30, x+expandLimit-160,y+130, x+expandLimit-60,y+140);
+      strokeWeight(1);          // reset the strokeWeight for next time
+      
+      fill(eggshell);  // pulse window background
+      stroke(eggshell);
+      rect(PulseWindowX,PulseWindowY,PulseWindowWidth,PulseWindowHeight);
+      float upperClip = 800.0f;  // used to keep the pulse waveform within the pulse wave window          
+      float lowerClip = 200.0f;
+      if(synthesizeData){
+        if(rising){  // MAKE A SAW WAVE FOR TESTING
+         PulseWaveY[PulseWaveY.length-1]--;   // place the new raw datapoint at the end of the array
+         if(PulseWaveY[PulseWaveY.length-1] == PulseWindowY){ rising = false; }
+        }else{
+         PulseWaveY[PulseWaveY.length-1]++;   // place the new raw datapoint at the end of the array
+         if(PulseWaveY[PulseWaveY.length-1] == PulseWindowY+PulseWindowHeight){ rising = true; }
+        }
+      }else{
+        float sensorValue = PApplet.parseFloat(OBCI.rawReceivedDataPacket.auxValues[0]);
+        PulseWaveY[PulseWaveY.length-1] = 
+        PApplet.parseInt(map(sensorValue,lowerClip,upperClip,PApplet.parseFloat(PulseWindowY+PulseWindowHeight),PApplet.parseFloat(PulseWindowY)));
+        PulseWaveY[PulseWaveY.length-1] = constrain(PulseWaveY[PulseWaveY.length-1],PulseWindowY,PulseWindowY+PulseWindowHeight);
+      }
+      
+      for (int i = 0; i < PulseWaveY.length-1; i++) {      // move the pulse waveform by
+       PulseWaveY[i] = PulseWaveY[i+1];  
+      }
+      
+      stroke(255,0,0);                               // red is a good color for the pulse waveform
+      noFill();
+      beginShape();                                  // using beginShape() renders fast
+      for (int x = 0; x < PulseWaveY.length; x++) {    
+       vertex(PulseWindowX+x, PulseWaveY[x]);                    //draw a line connecting the data points
+      }
+      endShape();
+      
+      
+      fill(255, 0, 0);
+      collapser.draw(PApplet.parseInt(x - collapser.but_dx), PApplet.parseInt(topMargin + (h-collapser.but_dy)/2));
+      popStyle();
+      }
+    }
+  }
+
+  public boolean isMouseHere() {
+    if (mouseX >= x && mouseX <= width && mouseY >= y && mouseY <= height - bottomMargin) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  public boolean isMouseInButton() {
+    verbosePrint("Playground: isMouseInButton: attempting");
+    if (mouseX >= collapser.but_x && mouseX <= collapser.but_x+collapser.but_dx && mouseY >= collapser.but_y && mouseY <= collapser.but_y + collapser.but_dy) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  public void toggleWindow() {
+    if (isOpen) {//if open
+      verbosePrint("close");
+      collapsing = true;//collapsing = true;
+      isOpen = false;
+      collapser.but_txt = "<";
+    } else {//if closed
+      verbosePrint("open");
+      collapsing = false;//expanding = true;
+      isOpen = true;
+      collapser.but_txt = ">";
+    }
+  }
+
+  public void mousePressed() {
+    verbosePrint("Playground >> mousePressed()");
+  }
+
+  public void mouseReleased() {
+    verbosePrint("Playground >> mouseReleased()");
+  }
+
+  public void expand() {
+    if (w <= expandLimit) {
+      w = w + 50;
+      x = width - w;
+      PulseWindowX = PApplet.parseInt(x)+5;
+    }
+  }
+
+  public void collapse() {
+    if (w >= 0) {
+      w = w - 50;
+      x = width - w;
+      PulseWindowX = PApplet.parseInt(x)+5;
     }
   }
 }
