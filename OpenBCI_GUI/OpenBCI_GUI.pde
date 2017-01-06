@@ -474,6 +474,7 @@ void killRunningProcessMac() {
 boolean killRunningprocessWin() {
   try {
     Runtime.getRuntime().exec("taskkill /F /IM Ganglion Hub.exe");
+    Runtime.getRuntime().exec("taskkill /F /IM Ganglion Hub (32 bit).exe");
     return true;
   } catch (Exception err) {
     err.printStackTrace();
