@@ -297,7 +297,7 @@ class OpenBCI_ADS1299 {
   private int prevSampleIndex = 0;
   private int serialErrorCounter = 0;
 
-  private final float fs_Hz = 250.0f;  //sample rate used by OpenBCI board...set by its Arduino code
+  private float fs_Hz = 250.0f;  //sample rate used by OpenBCI board...set by its Arduino code
   private final float ADS1299_Vref = 4.5f;  //reference voltage for ADC in ADS1299.  set by its hardware
   private float ADS1299_gain = 24.0;  //assumed gain setting for ADS1299.  set by its Arduino code
   private float openBCI_series_resistor_ohms = 2200; // Ohms. There is a series resistor on the 32 bit board.
@@ -354,6 +354,14 @@ class OpenBCI_ADS1299 {
   };
   public boolean get_isNewDataPacketAvailable() {
     return isNewDataPacketAvailable;
+  }
+
+  public void set_fs_Hz_with_nchan(int _nchan) {
+    if (_nchan == NCHAN_CYTON_DAISY) {
+      fs_Hz = 125.0; // Sample rate for sixteen channels
+    } else {
+      fs_Hz = 250.0; // Sample rate for eight channels
+    }
   }
 
   //constructors

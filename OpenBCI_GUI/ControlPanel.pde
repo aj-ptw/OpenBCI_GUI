@@ -1154,6 +1154,15 @@ void updateToNChan(int _nchan) {
   yLittleBuff_uV = new float[nchan][nPointsPerUpdate];
   output("channel count set to " + str(nchan));
   updateChannelArrays(nchan); //make sure to reinitialize the channel arrays with the right number of channels
+  switch (_nchan) {
+    case NCHAN_CYTON:
+    case NCHAN_CYTON_DAISY:
+      openBCI.set_fs_Hz_with_nchan(_nchan);
+      break;
+    case NCHAN_GANGLION: // Don't need to worry about Ganglion because it's set at 200.
+    default:
+      break;
+  }
 }
 
 public void set_channel_popup(){;
