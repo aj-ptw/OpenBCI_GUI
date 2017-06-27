@@ -1,7 +1,10 @@
 # 2.3.0
 
-# Breaking Changes
+### Breaking Changes
 * Changed name of tutorialsButton to helpButton to better match it's purpose.
+
+### Bug Fixes
+* Closes #145 - Monitors with high DPI can't use GUI because of under pixilation. 
 
 # 2.2.0
 
