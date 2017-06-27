@@ -1,3 +1,8 @@
+# 2.3.0
+
+# Breaking Changes
+* Changed name of tutorialsButton to helpButton to better match it's purpose.
+
 # 2.2.0
 
 ### Bug Fixes

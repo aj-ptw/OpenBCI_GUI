@@ -219,6 +219,8 @@ class ControlPanel {
   SyntheticChannelCountBox synthChannelCountBox;
   PlaybackChannelCountBox playbackChannelCountBox;
 
+  SystemSettingsBox systemSettingsBox;
+
   PlaybackFileBox playbackFileBox;
   SDConverterBox sdConverterBox;
 
@@ -270,6 +272,9 @@ class ControlPanel {
     synthChannelCountBox = new SyntheticChannelCountBox(x + w, dataSourceBox.y, w, h, globalPadding);
     sdBox = new SDBox(x + w, (channelCountBox.y + channelCountBox.h), w, h, globalPadding);
 
+    systemSettingsBox = new SystemSettingsBox(x, dataSourceBox.y + dataSourceBox.h, w, h, globalPadding);
+
+
     //boxes active when eegDataSource = Playback
     playbackChannelCountBox = new PlaybackChannelCountBox(x + w, dataSourceBox.y, w, h, globalPadding);
     playbackFileBox = new PlaybackFileBox(x + w, (playbackChannelCountBox.y + playbackChannelCountBox.h), w, h, globalPadding);
@@ -279,7 +284,7 @@ class ControlPanel {
     channelPopup = new ChannelPopup(x+w, y, w, h, globalPadding);
     pollPopup = new PollPopup(x+w,y,w,h,globalPadding);
 
-    initBox = new InitBox(x, (dataSourceBox.y + dataSourceBox.h), w, h, globalPadding);
+    initBox = new InitBox(x, (systemSettingsBox.y + systemSettingsBox.h), w, h, globalPadding);
 
     // Ganglion
     bleBox = new BLEBox(x + w, dataSourceBox.y, w, h, globalPadding);
@@ -323,6 +328,7 @@ class ControlPanel {
 
     //update all boxes if they need to be
     dataSourceBox.update();
+    systemSettingsBox.update();
     serialBox.update();
     bleBox.update();
     dataLogBox.update();
@@ -398,6 +404,7 @@ class ControlPanel {
 
     if (systemMode != 10) { // only draw control panel boxes if system running is false
       dataSourceBox.draw();
+      systemSettingsBox.draw();
       drawStopInstructions = false;
       cp5.setVisible(true);//make sure controlP5 elements are visible
       cp5Popup.setVisible(true);
@@ -479,19 +486,19 @@ class ControlPanel {
     if (drawStopInstructions) {
       pushStyle();
       fill(boxColor);
-      strokeWeight(1);
+      strokeWeight(guiScale(1));
       stroke(boxStrokeColor);
-      rect(x, y, w, dataSourceBox.h); //draw background of box
+      rect(guiScale(x), guiScale(y), guiScale(w), guiScale(dataSourceBox.h)); //draw background of box
       String stopInstructions = "Press the \"STOP SYSTEM\" button to change your data source or edit system settings.";
       textAlign(CENTER, TOP);
-      textFont(p4, 14);
+      textFont(p4, guiScale(14));
       fill(bgColor);
-      text(stopInstructions, x + globalPadding*2, y + globalPadding*3, w - globalPadding*4, dataSourceBox.h - globalPadding*4);
+      text(stopInstructions, guiScale(x + globalPadding*2), guiScale(y + globalPadding*3), guiScale(w - globalPadding*4), guiScale(dataSourceBox.h - globalPadding*4));
       popStyle();
     }
 
     //draw the ControlP5 stuff
-    textFont(p4, 14);
+    textFont(p4, guiScale(14));
     cp5Popup.draw();
     cp5.draw();
 
@@ -1130,16 +1137,59 @@ class DataSourceBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("DATA SOURCE", x + padding, y + padding);
+    text("DATA SOURCE", guiScale(x + padding), guiScale(y + padding));
     popStyle();
     //draw contents of Data Source Box at top of control panel
     //Title
     //checkboxes of system states
+  }
+};
+
+class SystemSettingsBox {
+  int x, y, w, h, padding; //size and position
+  int numItems = 1;
+  int boxHeight = 24;
+  int spacing = 43;
+
+
+  CheckBox sourceCheckBox;
+
+  SystemSettingsBox(int _x, int _y, int _w, int _h, int _padding) {
+    x = _x;
+    y = _y;
+    w = _w;
+    h = spacing + (numItems * boxHeight);
+    padding = _padding;
+
+    sourceList = new MenuList(cp5, "settingsList", w - padding*2, numItems * boxHeight, p4);
+    // sourceList.itemHeight = 28;
+    // sourceList.padding = 9;
+    sourceList.setPosition(x + padding, y + padding*2 + 13);
+    sourceList.addItem(makeItem("Display Settings"));
+
+    sourceList.scrollerLength = 10;
+  }
+
+  public void update() {
+
+  }
+
+  public void draw() {
+    pushStyle();
+    fill(boxColor);
+    stroke(boxStrokeColor);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
+    fill(bgColor);
+    textFont(h3, guiScale(16));
+    textAlign(LEFT, TOP);
+    text("SYSTEM SETTINGS", guiScale(x + padding), guiScale(y + padding));
+    popStyle();
   }
 };
 
@@ -1178,12 +1228,12 @@ class SerialBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("SERIAL/COM PORT", x + padding, y + padding);
+    text("SERIAL/COM PORT", guiScale(x + padding), guiScale(y + padding));
     popStyle();
 
     // openClosePort.draw();
@@ -1230,12 +1280,12 @@ class BLEBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("BLE DEVICES", x + padding, y + padding);
+    text("BLE DEVICES", guiScale(x + padding), guiScale(y + padding));
     popStyle();
 
     refreshBLE.draw();
@@ -1280,7 +1330,7 @@ class DataLogBox {
 
 
     cp5.addTextfield("fileName")
-      .setPosition(x + 90, y + 32)
+      .setPosition(guiScale(x + 90), guiScale(y + 32))
       .setCaptionLabel("")
       .setSize(157, 26)
       .setFont(f2)
@@ -1306,21 +1356,21 @@ class DataLogBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("DATA LOG FILE", x + padding, y + padding);
-    textFont(p4, 14);;
-    text("File Name", x + padding, y + padding*2 + 14);
+    text("DATA LOG FILE", guiScale(x + padding), guiScale(y + padding));
+    textFont(p4, guiScale(14));
+    text("File Name", guiScale(x + padding), guiScale(y + padding*2 + 14));
     popStyle();
-    cp5.get(Textfield.class, "fileName").setPosition(x + 90, y + 32);
-    autoFileName.but_y = y + 66;
+    cp5.get(Textfield.class, "fileName").setPosition(guiScale(x + 90), guiScale(y + 32));
+    autoFileName.but_y = guiScale(y + 66);
     autoFileName.draw();
-    outputODF.but_y = y + padding*2 + 18 + 58;
+    outputODF.but_y = guiScale(y + padding*2 + 18 + 58);
     outputODF.draw();
-    outputBDF.but_y = y + padding*2 + 18 + 58;
+    outputBDF.but_y = guiScale(y + padding*2 + 18 + 58);
     outputBDF.draw();
   }
 };
@@ -1354,7 +1404,7 @@ class DataLogBoxGanglion {
 
 
     cp5.addTextfield("fileNameGanglion")
-      .setPosition(x + 90, y + 32)
+      .setPosition(guiScale(x + 90), guiScale(y + 32))
       .setCaptionLabel("")
       .setSize(157, 26)
       .setFont(f2)
@@ -1380,21 +1430,21 @@ class DataLogBoxGanglion {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("DATA LOG FILE", x + padding, y + padding);
-    textFont(p4, 14);;
-    text("File Name", x + padding, y + padding*2 + 14);
+    text("DATA LOG FILE", guiScale(x + padding), guiScale(y + padding));
+    textFont(p4, guiScale(14));;
+    text("File Name", guiScale(x + padding), guiScale(y + padding*2 + 14));
     popStyle();
-    cp5.get(Textfield.class, "fileNameGanglion").setPosition(x + 90, y + 32);
-    autoFileNameGanglion.but_y = y + 66;
+    cp5.get(Textfield.class, "fileNameGanglion").setPosition(guiScale(x + 90), guiScale(y + 32));
+    autoFileNameGanglion.but_y = guiScale(y + 66);
     autoFileNameGanglion.draw();
-    outputODFGanglion.but_y = y + padding*2 + 18 + 58;
+    outputODFGanglion.but_y = guiScale(y + padding*2 + 18 + 58);
     outputODFGanglion.draw();
-    outputBDFGanglion.but_y = y + padding*2 + 18 + 58;
+    outputBDFGanglion.but_y = guiScale(y + padding*2 + 18 + 58);
     outputBDFGanglion.draw();
   }
 };
@@ -1425,16 +1475,16 @@ class ChannelCountBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("CHANNEL COUNT ", x + padding, y + padding);
+    text("CHANNEL COUNT ", guiScale(x + padding), guiScale(y + padding));
     fill(bgColor); //set color to green
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("  (" + str(nchan) + ")", x + padding + 142, y + padding); // print the channel count in green next to the box title
+    text("  (" + str(nchan) + ")", guiScale(x + padding + 142), guiScale(y + padding)); // print the channel count in green next to the box title
     popStyle();
 
     chanButton8.draw();
@@ -1470,16 +1520,16 @@ class SyntheticChannelCountBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("CHANNEL COUNT", x + padding, y + padding);
+    text("CHANNEL COUNT", guiScale(x + padding), guiScale(y + padding));
     fill(bgColor); //set color to green
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("  (" + str(nchan) + ")", x + padding + 142, y + padding); // print the channel count in green next to the box title
+    text("  (" + str(nchan) + ")", guiScale(x + padding + 142), guiScale(y + padding)); // print the channel count in green next to the box title
     popStyle();
 
     synthChanButton4.draw();
@@ -1516,16 +1566,16 @@ class PlaybackChannelCountBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("CHANNEL COUNT", x + padding, y + padding);
+    text("CHANNEL COUNT", guiScale(x + padding), guiScale(y + padding));
     fill(bgColor); //set color to green
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("  (" + str(nchan) + ")", x + padding + 142, y + padding); // print the channel count in green next to the box title
+    text("  (" + str(nchan) + ")", guiScale(x + padding + 142), guiScale(y + padding)); // print the channel count in green next to the box title
     popStyle();
 
     playbackChanButton4.draw();
@@ -1554,12 +1604,12 @@ class PlaybackFileBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("PLAYBACK FILE", x + padding, y + padding);
+    text("PLAYBACK FILE", guiScale(x + padding), guiScale(y + padding));
     popStyle();
 
     selectPlaybackFile.draw();
@@ -1602,12 +1652,12 @@ class SDBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("WRITE TO SD (Y/N)?", x + padding, y + padding);
+    text("WRITE TO SD (Y/N)?", guiScale(x + padding), guiScale(y + padding));
     popStyle();
 
     //the drawing of the sdTimes is handled earlier in ControlPanel.draw()
@@ -1663,12 +1713,12 @@ class RadioConfigBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("RADIO CONFIGURATION (v2)", x + padding, y + padding);
+    text("RADIO CONFIGURATION (v2)", guiScale(x + padding), guiScale(y + padding));
     popStyle();
     getChannel.draw();
     setChannel.draw();
@@ -1691,18 +1741,18 @@ class RadioConfigBox {
   public void print_onscreen(String localstring){
     textAlign(LEFT);
     fill(0);
-    rect(x + padding, y + (padding*8) + 18 + (24*2), (w-padding*3 + 5), 135 - 24 - padding);
+    rect(guiScale(x + padding), guiScale(y + (padding*8) + 18 + (24*2)), guiScale((w-padding*3 + 5)), guiScale(135 - 24 - padding));
     fill(255);
-    text(localstring, x + padding + 10, y + (padding*8) + 18 + (24*2) + 15, (w-padding*3 ), 135 - 24 - padding -15);
+    text(localstring, guiScale(x + padding + 10), guiScale(y + (padding*8) + 18 + (24*2) + 15), guiScale(w-padding*3), guiScale(135 - 24 - padding -15));
     this.last_message = localstring;
   }
 
   public void print_lastmessage(){
 
     fill(0);
-    rect(x + padding, y + (padding*7) + 18 + (24*5), (w-padding*3 + 5), 135);
+    rect(guiScale(x + padding), guiScale(y + (padding*7) + 18 + (24*5)), guiScale(w-padding*3 + 5), guiScale(135));
     fill(255);
-    text(this.last_message, 180, 340, 240, 60);
+    text(this.last_message, guiScale(180), guiScale(340), guiScale(240), guiScale(60));
   }
 };
 
@@ -1726,12 +1776,12 @@ class SDConverterBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("CONVERT SD FOR PLAYBACK", x + padding, y + padding);
+    text("CONVERT SD FOR PLAYBACK", guiScale(x + padding), guiScale(y + padding));
     popStyle();
 
     selectSDFile.draw();
@@ -1770,12 +1820,12 @@ class ChannelPopup {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("CHANNEL SELECTION", x + padding, y + padding);
+    text("CHANNEL SELECTION", guiScale(x + padding), guiScale(y + padding));
     popStyle();
 
     // openClosePort.draw();
@@ -1821,12 +1871,12 @@ class PollPopup {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     fill(bgColor);
-    textFont(h3, 16);
+    textFont(h3, guiScale(16));
     textAlign(LEFT, TOP);
-    text("POLL SELECTION", x + padding, y + padding);
+    text("POLL SELECTION", guiScale(x + padding), guiScale(y + padding));
     popStyle();
 
     // openClosePort.draw();
@@ -1871,8 +1921,8 @@ class InitBox {
     pushStyle();
     fill(boxColor);
     stroke(boxStrokeColor);
-    strokeWeight(1);
-    rect(x, y, w, h);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
     popStyle();
     initSystemButton.draw();
   }
@@ -2003,7 +2053,7 @@ public class MenuList extends controlP5.Controller {
       }
       if (i == activeItem) {
         menu.stroke(184, 220, 105, 255);
-        menu.strokeWeight(1);
+        menu.strokeWeight(guiScale(1));
         menu.fill(184, 220, 105, 255);
         menu.rect(0, 0, getWidth()-1, itemHeight-1 );
         menu.noStroke();

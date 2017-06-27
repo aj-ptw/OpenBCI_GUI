@@ -120,6 +120,10 @@ long timeOfInit;
 long timeSinceStopRunning = 1000;
 int prev_time_millis = 0;
 
+// GUI Settings
+double guiScaleFactor = 100.0;
+int guiFrameRate = 60;
+
 // final int nPointsPerUpdate = 50; //update the GUI after this many data points have been received
 // final int nPointsPerUpdate = 24; //update the GUI after this many data points have been received
 final int nPointsPerUpdate = 10; //update the GUI after this many data points have been received
@@ -245,6 +249,10 @@ PApplet ourApplet;
 
 //========================SETUP============================//
 
+// called when a gui element needs to be scaled.
+int guiScale(int i) {
+  return (int)((double)i * guiScaleFactor / 100.0);
+}
 
 void setup() {
   // Step 1: Prepare the exit handler that will attempt to close a running node
@@ -263,9 +271,11 @@ void setup() {
   println("Last update: 12/20/2016"); //Welcome line.
   println("For more information about how to work with this code base, please visit: http://docs.openbci.com/OpenBCI%20Software/");
   //open window
-  size(1024, 768, P2D);
+  win_x = 1024;
+  win_y = 768;
+  size(win_x, win_y, P2D);
   ourApplet = this;
-  frameRate(60); //refresh rate ... this will slow automatically, if your processor can't handle the specified rate
+  frameRate(guiFrameRate); //refresh rate ... this will slow automatically, if your processor can't handle the specified rate
   smooth(); //turn this off if it's too slow
 
   surface.setResizable(true);  //updated from frame.setResizable in Processing 2
@@ -278,7 +288,7 @@ void setup() {
   f1 = createFont("fonts/Raleway-SemiBold.otf", 16);
   f2 = createFont("fonts/Raleway-Regular.otf", 15);
   f3 = createFont("fonts/Raleway-SemiBold.otf", 15);
-  f4 = createFont("fonts/Raleway-SemiBold.otf", 64);  // clear bigger fonts for widgets
+  f4 = createFont("fonts/Raleway-SemiBold.otf", 64);  // clear bigger fonts for widget)s
 
   h1 = createFont("fonts/Montserrat-Regular.otf", 20);
   h2 = createFont("fonts/Montserrat-Regular.otf", 18);

@@ -24,7 +24,7 @@ class TopNav {
   Button filtBPButton;
   Button filtNotchButton;
 
-  Button tutorialsButton;
+  Button helpButton;
   Button shopButton;
   Button issuesButton;
 
@@ -46,18 +46,18 @@ class TopNav {
 
     //top right buttons from right to left
     int butNum = 1;
-    tutorialsButton = new Button(width - 3*(butNum) - 80, 3, 80, 26, "Help", fontInfo.buttonLabel_size);
-    tutorialsButton.setFont(h3, 16);
-    tutorialsButton.setHelpText("Here you will find links to helpful online tutorials and getting started guides. Also, check out how to create custom widgets for the GUI!");
+    helpButton = new Button(width - 3*(butNum) - 80, 3, 80, 26, "Help", fontInfo.buttonLabel_size);
+    helpButton.setFont(h3, 16);
+    helpButton.setHelpText("Here you will find links to helpful online tutorials and getting started guides. Also, check out how to create custom widgets for the GUI!");
 
     butNum = 2;
-    issuesButton = new Button(width - 3*(butNum) - 80 - tutorialsButton.but_dx, 3, 80, 26, "Issues", fontInfo.buttonLabel_size);
+    issuesButton = new Button(width - 3*(butNum) - 80 - helpButton.but_dx, 3, 80, 26, "Issues", fontInfo.buttonLabel_size);
     issuesButton.setHelpText("If you have suggestions or want to share a bug you've found, please create an issue on the GUI's Github repo!");
     issuesButton.setURL("https://github.com/OpenBCI/OpenBCI_GUI_v2.0/issues");
     issuesButton.setFont(h3, 16);
 
     butNum = 3;
-    shopButton = new Button(width - 3*(butNum) - 80 - issuesButton.but_dx - tutorialsButton.but_dx, 3, 80, 26, "Shop", fontInfo.buttonLabel_size);
+    shopButton = new Button(width - 3*(butNum) - 80 - issuesButton.but_dx - helpButton.but_dx, 3, 80, 26, "Shop", fontInfo.buttonLabel_size);
     shopButton.setHelpText("Head to our online store to purchase the latest OpenBCI hardware and accessories.");
     shopButton.setURL("http://shop.openbci.com/");
     shopButton.setFont(h3, 16);
@@ -95,44 +95,44 @@ class TopNav {
       controlPanelCollapser.setColorNotPressed(color(255));
       issuesButton.setColorNotPressed(color(255));
       shopButton.setColorNotPressed(color(255));
-      tutorialsButton.setColorNotPressed(color(255));
+      helpButton.setColorNotPressed(color(255));
 
       controlPanelCollapser.textColorNotActive = color(bgColor);
       issuesButton.textColorNotActive = color(bgColor);
       shopButton.textColorNotActive = color(bgColor);
-      tutorialsButton.textColorNotActive = color(bgColor);
+      helpButton.textColorNotActive = color(bgColor);
 
 
     } else if(colorScheme == COLOR_SCHEME_ALTERNATIVE_A){
       // controlPanelCollapser.setColorNotPressed(color(150));
       // issuesButton.setColorNotPressed(color(150));
       // shopButton.setColorNotPressed(color(150));
-      // tutorialsButton.setColorNotPressed(color(150));
+      // helpButton.setColorNotPressed(color(150));
 
       // controlPanelCollapser.setColorNotPressed(bgColor);
       // issuesButton.setColorNotPressed(bgColor);
       // shopButton.setColorNotPressed(bgColor);
-      // tutorialsButton.setColorNotPressed(bgColor);
+      // helpButton.setColorNotPressed(bgColor);
 
       controlPanelCollapser.setColorNotPressed(openbciBlue);
       issuesButton.setColorNotPressed(openbciBlue);
       shopButton.setColorNotPressed(openbciBlue);
-      tutorialsButton.setColorNotPressed(openbciBlue);
+      helpButton.setColorNotPressed(openbciBlue);
 
       controlPanelCollapser.textColorNotActive = color(255);
       issuesButton.textColorNotActive = color(255);
       shopButton.textColorNotActive = color(255);
-      tutorialsButton.textColorNotActive = color(255);
+      helpButton.textColorNotActive = color(255);
 
       // controlPanelCollapser.textColorNotActive = color(openbciBlue);
       // issuesButton.textColorNotActive = color(openbciBlue);
       // shopButton.textColorNotActive = color(openbciBlue);
-      // tutorialsButton.textColorNotActive = color(openbciBlue);
+      // helpButton.textColorNotActive = color(openbciBlue);
       //
       // controlPanelCollapser.textColorNotActive = color(bgColor);
       // issuesButton.textColorNotActive = color(bgColor);
       // shopButton.textColorNotActive = color(bgColor);
-      // tutorialsButton.textColorNotActive = color(bgColor);
+      // helpButton.textColorNotActive = color(bgColor);
     }
 
     if(systemMode >= SYSTEMMODE_POSTINIT){
@@ -207,7 +207,7 @@ class TopNav {
     }
 
     controlPanelCollapser.draw();
-    tutorialsButton.draw();
+    helpButton.draw();
     issuesButton.draw();
     shopButton.draw();
 
@@ -220,9 +220,9 @@ class TopNav {
   }
 
   void screenHasBeenResized(int _x, int _y){
-    tutorialsButton.but_x = width - 3 - tutorialsButton.but_dx;
-    issuesButton.but_x = width - 3*2 - issuesButton.but_dx - tutorialsButton.but_dx;
-    shopButton.but_x = width - 3*3 - shopButton.but_dx - issuesButton.but_dx - tutorialsButton.but_dx;
+    helpButton.but_x = width - 3 - helpButton.but_dx;
+    issuesButton.but_x = width - 3*2 - issuesButton.but_dx - helpButton.but_dx;
+    shopButton.but_x = width - 3*3 - shopButton.but_dx - issuesButton.but_dx - helpButton.but_dx;
 
     if(systemMode == SYSTEMMODE_POSTINIT){
       layoutButton.but_x = width - 3 - layoutButton.but_dx;
@@ -273,8 +273,8 @@ class TopNav {
       controlPanelCollapser.setIsActive(true);
     }
 
-    if (tutorialsButton.isMouseHere()) {
-      tutorialsButton.setIsActive(true);
+    if (helpButton.isMouseHere()) {
+      helpButton.setIsActive(true);
       //toggle help/tutorial dropdown menu
     }
     if (issuesButton.isMouseHere()) {
@@ -292,9 +292,9 @@ class TopNav {
 
   void mouseReleased(){
 
-    if (tutorialsButton.isMouseHere() && tutorialsButton.isActive()) {
+    if (helpButton.isMouseHere() && helpButton.isActive()) {
       tutorialSelector.toggleVisibility();
-      tutorialsButton.setIsActive(true);
+      helpButton.setIsActive(true);
     }
 
     if (issuesButton.isMouseHere() && issuesButton.isActive()) {
@@ -325,7 +325,7 @@ class TopNav {
       layoutButton.setIsActive(false);
     }
 
-    tutorialsButton.setIsActive(false);
+    helpButton.setIsActive(false);
     issuesButton.setIsActive(false);
     shopButton.setIsActive(false);
 
@@ -588,7 +588,7 @@ class TutorialSelector{
   void update(){
     if(isVisible){ //only update if visible
       // //close dropdown when mouse leaves
-      // if((mouseX < x || mouseX > x + w || mouseY < y || mouseY > y + h) && !topNav.tutorialsButton.isMouseHere()){
+      // if((mouseX < x || mouseX > x + w || mouseY < y || mouseY > y + h) && !topNav.helpButton.isMouseHere()){
       //   toggleVisibility();
       // }
     }
@@ -611,7 +611,7 @@ class TutorialSelector{
       fill(openbciBlue);
       // fill(177, 184, 193);
       noStroke();
-      rect(x+w-(topNav.tutorialsButton.but_dx-1), y, (topNav.tutorialsButton.but_dx-1) , 1);
+      rect(x+w-(topNav.helpButton.but_dx-1), y, (topNav.helpButton.but_dx-1) , 1);
 
       popStyle();
     }
@@ -635,7 +635,7 @@ class TutorialSelector{
   void mouseReleased(){
     //only allow button interactivity if isVisible==true
     if(isVisible){
-      if((mouseX < x || mouseX > x + w || mouseY < y || mouseY > y + h) && !topNav.tutorialsButton.isMouseHere()){
+      if((mouseX < x || mouseX > x + w || mouseY < y || mouseY > y + h) && !topNav.helpButton.isMouseHere()){
         toggleVisibility();
       }
       for(int i = 0; i < tutorialOptions.size(); i++){
