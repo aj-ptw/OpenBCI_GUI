@@ -33,11 +33,15 @@ CallbackListener cb = new CallbackListener() { //used by ControlP5 to clear text
     } else if (cp5.isMouseOver(cp5.get(Textfield.class, "fileNameGanglion"))){
       println("CallbackListener: controlEvent: clearing");
       cp5.get(Textfield.class, "fileNameGanglion").clear();
+    } else if (cp5.isMouseOver(cp5.get(Textfield.class, "guiScaleFactor"))){
+      println("CallbackListener: guiScaleFactor: clearing");
+      cp5.get(Textfield.class, "guiScaleFactor").clear();
     }
   }
 };
 
 MenuList sourceList;
+MenuList settingsList;
 
 //Global buttons and elements for the control panel (changed within the classes below)
 MenuList serialList;
@@ -349,6 +353,10 @@ class ControlPanel {
 
     systemSettingsBox.update();
     guiScaleBox.update();
+
+    sourceList.updateMenu();
+    settingsList.updateMenu();
+
 
     channelPopup.update();
     serialList.updateMenu();
@@ -948,14 +956,14 @@ class ControlPanel {
     }
 
     if (setGUIScaleFactor.isMouseHere() && setGUIScaleFactor.wasPressed) {
-      String scaleFactorString = cp5.get(Textfield.class, "guiScaleFactor").getText();
+      guiScaleFactorStr = cp5.get(Textfield.class, "guiScaleFactor").getText();
       try {
-        float newScaleFactor = parseFloat(scaleFactorString);
+        float newScaleFactor = parseFloat(guiScaleFactorStr);
         guiScaleFactor = newScaleFactor;
         output("Set scale factor to " + guiScaleFactor);
         guiScaleFactorReset();
       }
-      catch(Exception e) {
+      catch(IllegalArgumentException e) {
         output("Error: Failed to parse new float (e.g. 100.0). Current scale factor: " + guiScaleFactor + ".");
       }
     }
@@ -1206,17 +1214,17 @@ class SystemSettingsBox {
     h = spacing + (numItems * boxHeight);
     padding = _padding;
 
-    sourceList = new MenuList(cp5, "settingsList", w - padding*2, numItems * boxHeight, p4);
+    settingsList = new MenuList(cp5, "settingsList", w - padding*2, numItems * boxHeight, p4);
     // sourceList.itemHeight = 28;
     // sourceList.padding = 9;
-    sourceList.setPosition(x + padding, y + padding*2 + 13);
-    sourceList.addItem(makeItem("Display Settings"));
+    settingsList.setPosition(x + padding, y + padding*2 + 13);
+    settingsList.addItem(makeItem("Display Settings"));
 
-    sourceList.scrollerLength = 10;
+    settingsList.scrollerLength = 10;
   }
 
   public void update() {
-
+    settingsList.updateMenu();
   }
 
   public void draw() {
@@ -1230,6 +1238,7 @@ class SystemSettingsBox {
     textAlign(LEFT, TOP);
     text("SYSTEM SETTINGS", guiScale(x + padding), guiScale(y + padding));
     popStyle();
+    settingsList.setPosition(guiScale(x + padding), guiScale(y + padding*2 + 13));
   }
 };
 
@@ -1257,7 +1266,7 @@ class GUIScaleBox {
       .setColorForeground(isSelected_color)  // border color when not selected
       .setColorActive(isSelected_color)  // border color when selected
       .setColorCursor(color(26, 26, 26))
-      .setText(str(guiScaleFactor))
+      .setText(guiScaleFactorStr)
       .align(5, 10, 20, 40)
       .onDoublePress(cb)
       .setAutoClear(true);
@@ -1284,7 +1293,7 @@ class GUIScaleBox {
     text("Scale Factor", guiScale(x + padding), guiScale(y + padding*2 + 14));
     popStyle();
     cp5.get(Textfield.class, "guiScaleFactor").setPosition(guiScale(x + 90), guiScale(y + 32));
-    setGUIScaleFactor.but_y = guiScaleInt(y + 66);
+    setGUIScaleFactor.but_y = y + guiScaleInt(66); // y already scaled
     setGUIScaleFactor.draw();
   }
 };
@@ -1462,11 +1471,11 @@ class DataLogBox {
     text("File Name", guiScale(x + padding), guiScale(y + padding*2 + 14));
     popStyle();
     cp5.get(Textfield.class, "fileName").setPosition(guiScale(x + 90), guiScale(y + 32));
-    autoFileName.but_y = guiScaleInt(y + 66);
+    autoFileName.but_y = y + guiScaleInt(66);
     autoFileName.draw();
-    outputODF.but_y = guiScaleInt(y + padding*2 + 18 + 58);
+    outputODF.but_y = y + guiScaleInt(padding*2 + 18 + 58);
     outputODF.draw();
-    outputBDF.but_y = guiScaleInt(y + padding*2 + 18 + 58);
+    outputBDF.but_y = y + guiScaleInt(padding*2 + 18 + 58);
     outputBDF.draw();
   }
 };
@@ -2127,7 +2136,7 @@ public class MenuList extends controlP5.Controller {
     // menu.textFont(cp5.getFont().getFont());
     menu.textFont(menuFont);
     menu.pushMatrix();
-    menu.translate( 0, pos );
+    menu.translate( 0, guiScaleInt(pos) );
     menu.pushMatrix();
 
     int i0;
@@ -2151,18 +2160,21 @@ public class MenuList extends controlP5.Controller {
         menu.stroke(184, 220, 105, 255);
         menu.strokeWeight(guiScale(1));
         menu.fill(184, 220, 105, 255);
-        menu.rect(0, 0, getWidth()-1, itemHeight-1 );
+        menu.rect(0, 0, guiScale(getWidth()-1), guiScale(itemHeight-1) );
         menu.noStroke();
       } else {
-        menu.rect(0, 0, getWidth(), itemHeight-1 );
+        menu.rect(0, 0, guiScale(getWidth()), guiScale(itemHeight-1) );
       }
       menu.fill(bgColor);
       menu.textFont(menuFont);
 
+      getValueLabel().setSize(guiScaleInt(14));
+      getCaptionLabel().setSize(guiScaleInt(14));
+
       //make sure there is something in the Ganglion serial list...
       try {
-        menu.text(m.get("headline").toString(), 8, itemHeight - padding); // 5/17
-        menu.translate( 0, itemHeight );
+        menu.text(m.get("headline").toString(), guiScale(8), guiScale(itemHeight - padding)); // 5/17
+        menu.translate( 0, guiScale(itemHeight) );
       } catch(Exception e){
         println("Nothing in list...");
       }

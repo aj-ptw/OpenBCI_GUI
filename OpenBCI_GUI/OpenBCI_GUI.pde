@@ -123,6 +123,7 @@ int prev_time_millis = 0;
 
 // GUI Settings
 float guiScaleFactor = 100.0;
+String guiScaleFactorStr = str(guiScaleFactor);
 int guiFrameRate = 60;
 
 // final int nPointsPerUpdate = 50; //update the GUI after this many data points have been received
