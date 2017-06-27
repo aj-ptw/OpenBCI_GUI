@@ -73,6 +73,7 @@ final int DATASOURCE_NORMAL_W_AUX = 0; // new default, data from serial with Acc
 final int DATASOURCE_GANGLION = 1;  //looking for signal from OpenBCI board via Serial/COM port, no Aux data
 final int DATASOURCE_PLAYBACKFILE = 2;  //playback from a pre-recorded text file
 final int DATASOURCE_SYNTHETIC = 3;  //Synthetically generated data
+final int DATASOURCE_DISPLAY_SETTINGS = 4;  //Adjust system settings
 public int eegDataSource = -1; //default to none of the options
 
 //here are variables that are used if loading input data from a CSV text file...double slash ("\\") is necessary to make a single slash
@@ -121,7 +122,7 @@ long timeSinceStopRunning = 1000;
 int prev_time_millis = 0;
 
 // GUI Settings
-double guiScaleFactor = 100.0;
+float guiScaleFactor = 100.0;
 int guiFrameRate = 60;
 
 // final int nPointsPerUpdate = 50; //update the GUI after this many data points have been received
@@ -250,8 +251,14 @@ PApplet ourApplet;
 //========================SETUP============================//
 
 // called when a gui element needs to be scaled.
-int guiScale(int i) {
-  return (int)((double)i * guiScaleFactor / 100.0);
+float guiScale(float i) {
+  return i * guiScaleFactor / 100.0;
+}
+
+// called when a gui element needs to be scaled.
+int guiScaleInt(float i) {
+  float scaleFac = guiScale(i);
+  return (int)scaleFac;
 }
 
 void setup() {
@@ -271,9 +278,7 @@ void setup() {
   println("Last update: 12/20/2016"); //Welcome line.
   println("For more information about how to work with this code base, please visit: http://docs.openbci.com/OpenBCI%20Software/");
   //open window
-  win_x = 1024;
-  win_y = 768;
-  size(win_x, win_y, P2D);
+  size(1024, 768, P2D);
   ourApplet = this;
   frameRate(guiFrameRate); //refresh rate ... this will slow automatically, if your processor can't handle the specified rate
   smooth(); //turn this off if it's too slow

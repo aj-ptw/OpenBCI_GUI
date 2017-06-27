@@ -1,4 +1,3 @@
-
 //////////////////////////////////////
 //
 // This file contains classes that are helpful for debugging, as well as the HelpWidget,
@@ -72,42 +71,42 @@ class HelpWidget {
       // draw background of widget
       stroke(bgColor);
       fill(255);
-      rect(-1, scale(height-h), scale(width+2), scale(h));
+      rect(guiScale(-1), guiScale(height-h), guiScale(width+2), guiScale(h));
       noStroke();
 
       //draw bg of text field of widget
-      strokeWeight(scale(1));
+      strokeWeight(guiScale(1));
       stroke(color(0, 5, 11));
       fill(color(0, 5, 11));
-      rect(scale(x + padding), scale(height-h + padding), scale(width - padding*2), scale(h - padding *2));
+      rect(guiScale(x + padding), guiScale(height-h + padding), guiScale(width - padding*2), guiScale(h - padding *2));
 
       textFont(p4);
-      textSize(scale(14));
+      textSize(guiScale(14));
       fill(255);
       textAlign(LEFT, TOP);
-      text(currentOutput, scale(padding*2), scale(height - h + padding));
+      text(currentOutput, guiScale(padding*2), guiScale(height - h + padding));
     } else if (colorScheme == COLOR_SCHEME_ALTERNATIVE_A){
       // draw background of widget
       stroke(bgColor);
       fill(31,69,110);
-      rect(-1, scale(height-h), scale(width+2), scale(h));
+      rect(-1, guiScale(height-h), guiScale(width+2), guiScale(h));
       noStroke();
 
       //draw bg of text field of widget
-      strokeWeight(scale(1));
+      strokeWeight(guiScale(1));
       stroke(color(0, 5, 11));
       fill(200);
       fill(255);
       // fill(57,128,204);
-      rect(scale(x + padding), scale(height-h + padding), scale(width - padding*2), scale(h - padding *2));
+      rect(guiScale(x + padding), guiScale(height-h + padding), guiScale(width - padding*2), guiScale(h - padding *2));
 
       textFont(p4);
-      textSize(scale(14));
+      textSize(guiScale(14));
       fill(bgColor);
       // fill(57,128,204);
       // fill(openbciBlue);
       textAlign(LEFT, TOP);
-      text(currentOutput, scale(padding*2), scale(height - h + padding));
+      text(currentOutput, guiScale(padding*2), guiScale(height - h + padding));
     }
 
     popStyle();

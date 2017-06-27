@@ -67,6 +67,7 @@ Button initSystemButton;
 Button autoFileName;
 Button outputBDF;
 Button outputODF;
+Button setGUIScaleFactor;
 
 Button autoFileNameGanglion;
 Button outputODFGanglion;
@@ -147,6 +148,11 @@ public void controlEvent(ControlEvent theEvent) {
     output("The new data source is " + str + " and NCHAN = [" + nchan + "]");
   }
 
+  if (theEvent.isFrom("settingsList")) {
+    controlPanel.hideAllBoxes();
+    // TODO: Stuff
+  }
+
   if (theEvent.isFrom("serialList")) {
     Map bob = ((MenuList)theEvent.getController()).getItem(int(theEvent.getValue()));
     openBCI_portName = (String)bob.get("headline");
@@ -220,6 +226,7 @@ class ControlPanel {
   PlaybackChannelCountBox playbackChannelCountBox;
 
   SystemSettingsBox systemSettingsBox;
+  GUIScaleBox guiScaleBox;
 
   PlaybackFileBox playbackFileBox;
   SDConverterBox sdConverterBox;
@@ -273,7 +280,7 @@ class ControlPanel {
     sdBox = new SDBox(x + w, (channelCountBox.y + channelCountBox.h), w, h, globalPadding);
 
     systemSettingsBox = new SystemSettingsBox(x, dataSourceBox.y + dataSourceBox.h, w, h, globalPadding);
-
+    guiScaleBox = new GUIScaleBox(x + w, systemSettingsBox.y, w, h, globalPadding);
 
     //boxes active when eegDataSource = Playback
     playbackChannelCountBox = new PlaybackChannelCountBox(x + w, dataSourceBox.y, w, h, globalPadding);
@@ -329,6 +336,7 @@ class ControlPanel {
     //update all boxes if they need to be
     dataSourceBox.update();
     systemSettingsBox.update();
+    guiScaleBox.update();
     serialBox.update();
     bleBox.update();
     dataLogBox.update();
@@ -472,6 +480,10 @@ class ControlPanel {
         cp5.get(Textfield.class, "fileNameGanglion").setVisible(true); //make sure the data file field is visible
         cp5.get(MenuList.class, "bleList").setVisible(true); //make sure the bleList menulist is visible
 
+      } else if (eegDataSource == DATASOURCE_DISPLAY_SETTINGS) {
+        guiScaleBox.draw();
+        cp5.get(Textfield.class, "guiScaleFactor").setVisible(true); //make sure the data file field is visible
+
       } else {
         //set other CP5 controllers invisible
         hideAllBoxes();
@@ -521,6 +533,7 @@ class ControlPanel {
     //set other CP5 controllers invisible
     cp5.get(Textfield.class, "fileName").setVisible(false); //make sure the data file field is visible
     cp5.get(Textfield.class, "fileNameGanglion").setVisible(false); //make sure the data file field is visible
+    cp5.get(Textfield.class, "guiScaleFactor").setVisible(false); //make sure the data file field is visible
     cp5.get(MenuList.class, "serialList").setVisible(false);
     cp5.get(MenuList.class, "bleList").setVisible(false);
     cp5.get(MenuList.class, "sdTimes").setVisible(false);
@@ -741,6 +754,15 @@ class ControlPanel {
         }
       }
 
+      if (eegDataSource == DATASOURCE_DISPLAY_SETTINGS) {
+
+        if (setGUIScaleFactor.isMouseHere()) {
+          setGUIScaleFactor.setIsActive(true);
+          setGUIScaleFactor.wasPressed = true;
+        }
+
+      }
+
     }
     // output("Text File Name: " + cp5.get(Textfield.class,"fileName").getText());
   }
@@ -922,6 +944,12 @@ class ControlPanel {
       outputDataSource = OUTPUT_SOURCE_BDF;
     }
 
+    if (setGUIScaleFactor.isMouseHere() && setGUIScaleFactor.wasPressed) {
+      String scaleFactorString = cp5.get(Textfield.class, "guiScaleFactor").getText();
+      float newScaleFactor = parseFloat(scaleFactorString);
+      output("Set scale factor to " + newScaleFactor);
+    }
+
     if (chanButton8.isMouseHere() && chanButton8.wasPressed) {
       updateToNChan(8);
     }
@@ -980,6 +1008,8 @@ class ControlPanel {
     outputODF.wasPressed = false;
     autoFileNameGanglion.setIsActive(false);
     autoFileNameGanglion.wasPressed = false;
+    setGUIScaleFactor.setIsActive(false);
+    setGUIScaleFactor.wasPressed = false;
     outputBDFGanglion.setIsActive(false);
     outputBDFGanglion.wasPressed = false;
     outputODFGanglion.setIsActive(false);
@@ -1193,6 +1223,62 @@ class SystemSettingsBox {
   }
 };
 
+class GUIScaleBox {
+  int x, y, w, h, padding; //size and position
+  //text field for inputing text
+
+  GUIScaleBox(int _x, int _y, int _w, int _h, int _padding) {
+    x = _x;
+    y = _y;
+    w = _w;
+    h = 127; // Added 24 +
+    padding = _padding;
+    //instantiate button
+
+    cp5.addTextfield("guiScaleFactor")
+      .setPosition(guiScale(x + 90), guiScale(y + 32))
+      .setCaptionLabel("")
+      .setSize(157, 26)
+      .setFont(f2)
+      .setFocus(false)
+      .setColor(color(26, 26, 26))
+      .setColorBackground(color(255, 255, 255)) // text field bg color
+      .setColorValueLabel(color(0, 0, 0))  // text color
+      .setColorForeground(isSelected_color)  // border color when not selected
+      .setColorActive(isSelected_color)  // border color when selected
+      .setColorCursor(color(26, 26, 26))
+      .setText(str(guiScaleFactor))
+      .align(5, 10, 20, 40)
+      .onDoublePress(cb)
+      .setAutoClear(true);
+
+    //clear text field on double click
+    setGUIScaleFactor = new Button (x + padding, y + 66, w-(padding*2), 24, "SET GUI SCALE FACTOR", fontInfo.buttonLabel_size);
+
+  }
+
+  public void update() {
+  }
+
+  public void draw() {
+    pushStyle();
+    fill(boxColor);
+    stroke(boxStrokeColor);
+    strokeWeight(guiScale(1));
+    rect(guiScale(x), guiScale(y), guiScale(w), guiScale(h));
+    fill(bgColor);
+    textFont(h3, guiScale(16));
+    textAlign(LEFT, TOP);
+    text("Display Size", guiScale(x + padding), guiScale(y + padding));
+    textFont(p4, guiScale(14));
+    text("Scale Factor", guiScale(x + padding), guiScale(y + padding*2 + 14));
+    popStyle();
+    cp5.get(Textfield.class, "guiScaleFactor").setPosition(guiScale(x + 90), guiScale(y + 32));
+    setGUIScaleFactor.but_y = guiScaleInt(y + 66);
+    setGUIScaleFactor.draw();
+  }
+};
+
 class SerialBox {
   int x, y, w, h, padding; //size and position
   //connect/disconnect button
@@ -1366,11 +1452,11 @@ class DataLogBox {
     text("File Name", guiScale(x + padding), guiScale(y + padding*2 + 14));
     popStyle();
     cp5.get(Textfield.class, "fileName").setPosition(guiScale(x + 90), guiScale(y + 32));
-    autoFileName.but_y = guiScale(y + 66);
+    autoFileName.but_y = guiScaleInt(y + 66);
     autoFileName.draw();
-    outputODF.but_y = guiScale(y + padding*2 + 18 + 58);
+    outputODF.but_y = guiScaleInt(y + padding*2 + 18 + 58);
     outputODF.draw();
-    outputBDF.but_y = guiScale(y + padding*2 + 18 + 58);
+    outputBDF.but_y = guiScaleInt(y + padding*2 + 18 + 58);
     outputBDF.draw();
   }
 };
@@ -1440,11 +1526,11 @@ class DataLogBoxGanglion {
     text("File Name", guiScale(x + padding), guiScale(y + padding*2 + 14));
     popStyle();
     cp5.get(Textfield.class, "fileNameGanglion").setPosition(guiScale(x + 90), guiScale(y + 32));
-    autoFileNameGanglion.but_y = guiScale(y + 66);
+    autoFileNameGanglion.but_y = guiScaleInt(y + 66);
     autoFileNameGanglion.draw();
-    outputODFGanglion.but_y = guiScale(y + padding*2 + 18 + 58);
+    outputODFGanglion.but_y = guiScaleInt(y + padding*2 + 18 + 58);
     outputODFGanglion.draw();
-    outputBDFGanglion.but_y = guiScale(y + padding*2 + 18 + 58);
+    outputBDFGanglion.but_y = guiScaleInt(y + padding*2 + 18 + 58);
     outputBDFGanglion.draw();
   }
 };
