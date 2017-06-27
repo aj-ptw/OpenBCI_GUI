@@ -289,26 +289,7 @@ void setup() {
 
   setupContainers();
 
-  //V1 FONTS
-  f1 = createFont("fonts/Raleway-SemiBold.otf", 16);
-  f2 = createFont("fonts/Raleway-Regular.otf", 15);
-  f3 = createFont("fonts/Raleway-SemiBold.otf", 15);
-  f4 = createFont("fonts/Raleway-SemiBold.otf", 64);  // clear bigger fonts for widget)s
-
-  h1 = createFont("fonts/Montserrat-Regular.otf", 20);
-  h2 = createFont("fonts/Montserrat-Regular.otf", 18);
-  h3 = createFont("fonts/Montserrat-Regular.otf", 16);
-  h4 = createFont("fonts/Montserrat-Regular.otf", 14);
-  h5 = createFont("fonts/Montserrat-Regular.otf", 12);
-
-  p1 = createFont("fonts/OpenSans-Regular.ttf", 20);
-  p2 = createFont("fonts/OpenSans-Regular.ttf", 18);
-  p3 = createFont("fonts/OpenSans-Regular.ttf", 16);
-  p15 = createFont("fonts/OpenSans-Regular.ttf", 15);
-  p4 = createFont("fonts/OpenSans-Regular.ttf", 14);
-  p13 = createFont("fonts/OpenSans-Regular.ttf", 13);
-  p5 = createFont("fonts/OpenSans-Regular.ttf", 12);
-  p6 = createFont("fonts/OpenSans-Regular.ttf", 10);
+  initializeFonts();
 
   //listen for window resize ... used to adjust elements in application
   frame.addComponentListener(new ComponentAdapter() {
@@ -679,6 +660,33 @@ void initSystem() {
   //reset init variables
   midInit = false;
   abandonInit = false;
+}
+
+void guiScaleFactorReset() {
+  initializeFonts();
+}
+
+void initializeFonts() {
+  //V1 FONTS
+  f1 = createFont("fonts/Raleway-SemiBold.otf", guiScale(16));
+  f2 = createFont("fonts/Raleway-Regular.otf", guiScale(15));
+  f3 = createFont("fonts/Raleway-SemiBold.otf", guiScale(15));
+  f4 = createFont("fonts/Raleway-SemiBold.otf", guiScale(64));  // clear bigger fonts for widgets
+
+  h1 = createFont("fonts/Montserrat-Regular.otf", guiScale(20));
+  h2 = createFont("fonts/Montserrat-Regular.otf", guiScale(18));
+  h3 = createFont("fonts/Montserrat-Regular.otf", guiScale(16));
+  h4 = createFont("fonts/Montserrat-Regular.otf", guiScale(14));
+  h5 = createFont("fonts/Montserrat-Regular.otf", guiScale(12));
+
+  p1 = createFont("fonts/OpenSans-Regular.ttf", guiScale(20));
+  p2 = createFont("fonts/OpenSans-Regular.ttf", guiScale(18));
+  p3 = createFont("fonts/OpenSans-Regular.ttf", guiScale(16));
+  p15 = createFont("fonts/OpenSans-Regular.ttf", guiScale(15));
+  p4 = createFont("fonts/OpenSans-Regular.ttf", guiScale(14));
+  p13 = createFont("fonts/OpenSans-Regular.ttf", guiScale(13));
+  p5 = createFont("fonts/OpenSans-Regular.ttf", guiScale(12));
+  p6 = createFont("fonts/OpenSans-Regular.ttf", guiScale(10));
 }
 
 /**

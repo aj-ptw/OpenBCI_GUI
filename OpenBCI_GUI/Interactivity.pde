@@ -834,12 +834,12 @@ class Button {
     }
     // noStroke();
     if(isCircleButton){
-      ellipse(but_x, but_y, but_dx, but_dy); //draw circular button
+      ellipse(guiScale(but_x), guiScale(but_y), guiScale(but_dx), guiScale(but_dy)); //draw circular button
     } else{
       if(cornerRoundness == 0){
-        rect(but_x, but_y, but_dx, but_dy); //draw normal rectangle button
+        rect(guiScale(but_x), guiScale(but_y), guiScale(but_dx), guiScale(but_dy)); //draw normal rectangle button
       } else {
-        rect(but_x, but_y, but_dx, but_dy, cornerRoundness); //draw button with rounded corners
+        rect(guiScale(but_x), guiScale(but_y), guiScale(but_dx), guiScale(but_dy), guiScale(cornerRoundness)); //draw button with rounded corners
       }
     }
 
@@ -851,9 +851,9 @@ class Button {
     }
     stroke(255);
     textFont(buttonFont);  //load f2 ... from control panel
-    textSize(buttonTextSize);
+    textSize(guiScale(buttonTextSize));
     textAlign(CENTER, CENTER);
-    textLeading(round(0.9*(textAscent()+textDescent())));
+    textLeading(guiScale(round(0.9*(textAscent()+textDescent()))));
     //    int x1 = but_x+but_dx/2;
     //    int y1 = but_y+but_dy/2;
     int x1, y1;
@@ -863,21 +863,21 @@ class Button {
 
     if(hasbgImage){ //if there is a bg image ... don't draw text
       imageMode(CENTER);
-      image(bgImage, but_x + (but_dx/2), but_y + (but_dy/2), but_dx-8, but_dy-8);
+      image(bgImage, guiScale(but_x + (but_dx/2)), guiScale(but_y + (but_dy/2)), guiScale(but_dx-8), guiScale(but_dy-8));
     } else{  //otherwise draw text
       if(buttonFont == h1 || buttonFont == h2 || buttonFont == h3 || buttonFont == h4 || buttonFont == h5){
-        text(but_txt, x1, y1 - 1); //for some reason y looks better at -1 with montserrat
+        text(but_txt, guiScale(x1), guiScale(y1 - 1)); //for some reason y looks better at -1 with montserrat
       } else if(buttonFont == p1 || buttonFont == p2 || buttonFont == p3 || buttonFont == p4 || buttonFont == p5 || buttonFont == p6){
-        textLeading(12); //line spacing
-        text(but_txt, x1, y1 - 2); //for some reason y looks better at -2 w/ Open Sans
+        textLeading(guiScale(12)); //line spacing
+        text(but_txt, guiScale(x1), guiScale(y1 - 2)); //for some reason y looks better at -2 w/ Open Sans
       } else{
-        text(but_txt, x1, y1); //as long as font is not Montserrat
+        text(but_txt, guiScale(x1), guiScale(y1)); //as long as font is not Montserrat
       }
     }
 
     //send some info to the HelpButtonText object to be drawn last in OpenBCI_GUI.pde ... we want to make sure it is render last, and on top of all other GUI stuff
     if(showHelpText && helpText != ""){
-      buttonHelpText.setButtonHelpText(helpText, but_x + but_dx/2, but_y + (3*but_dy)/4);
+      buttonHelpText.setButtonHelpText(helpText, guiScaleInt(but_x + but_dx/2), guiScaleInt(but_y + (3*but_dy)/4));
       buttonHelpText.setVisible(true);
     }
     //draw open/close arrow if it's a dropdown button
@@ -895,7 +895,7 @@ class Button {
         float point2y = but_y + but_dy/3f;
         float point3x = but_x + (but_dx - (but_dy/2f));
         float point3y = but_y + (2f*but_dy)/3f;
-        triangle(point1x, point1y, point2x, point2y, point3x, point3y); //downward triangle, indicating open
+        triangle(guiScale(point1x), guiScale(point1y), guiScale(point2x), guiScale(point2y), guiScale(point3x), guiScale(point3y)); //downward triangle, indicating open
       } else {
         float point1x = but_x + (but_dx - ((3f*but_dy)/4f));
         float point1y = but_y + (2f*but_dy)/3f;
@@ -903,7 +903,7 @@ class Button {
         float point2y = but_y + (2f*but_dy)/3f;
         float point3x = but_x + (but_dx - (but_dy/2f));
         float point3y = but_y + but_dy/3f;
-        triangle(point1x, point1y, point2x, point2y, point3x, point3y); //upward triangle, indicating closed
+        triangle(guiScale(point1x), guiScale(point1y), guiScale(point2x), guiScale(point2y), guiScale(point3x), guiScale(point3y)); //upward triangle, indicating closed
       }
       popStyle();
     }
@@ -955,21 +955,21 @@ class ButtonHelpText{
       pushStyle();
       textAlign(CENTER, TOP);
 
-      textFont(p5,12);
-      textLeading(lineSpacing); //line spacing
+      textFont(p5,guiScale(12));
+      textLeading(guiScale(lineSpacing)); //line spacing
       stroke(31,69,110);
       fill(255);
       numLines = (int)((float)myText.length()/30.0) + 1; //add 1 to round up
       // println("numLines: " + numLines);
       //if on left side of screen, draw box brightness to prevent box off screen
       if(x <= width/2){
-        rect(x, y, 200, 2*padding + numLines*lineSpacing + 4);
+        rect(guiScale(x), guiScale(y), guiScale(200), guiScale(2*padding + numLines*lineSpacing + 4));
         fill(31,69,110); //text colof
-        text(myText, x + padding, y + padding, 180, (numLines*lineSpacing + 4));
+        text(myText, guiScale(x + padding), guiScale(y + padding), guiScale(180), guiScale(numLines*lineSpacing + 4));
       } else{ //if on right side of screen, draw box left to prevent box off screen
-        rect(x - 200, y, 200, 2*padding + numLines*lineSpacing + 4);
+        rect(guiScale(x - 200), guiScale(y), guiScale(200), guiScale(2*padding + numLines*lineSpacing + 4));
         fill(31,69,110); //text colof
-        text(myText, x + padding - 200, y + padding, 180, (numLines*lineSpacing + 4));
+        text(myText, guiScale(x + padding - 200), guiScale(y + padding), guiScale(180), guiScale(numLines*lineSpacing + 4));
       }
       popStyle();
     }

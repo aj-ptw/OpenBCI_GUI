@@ -150,7 +150,9 @@ public void controlEvent(ControlEvent theEvent) {
 
   if (theEvent.isFrom("settingsList")) {
     controlPanel.hideAllBoxes();
-    // TODO: Stuff
+    eegDataSource = DATASOURCE_DISPLAY_SETTINGS; // reset global eegDataSource to the selected value from the list
+    output("The new data source is " + str(eegDataSource));
+
   }
 
   if (theEvent.isFrom("serialList")) {
@@ -335,8 +337,6 @@ class ControlPanel {
 
     //update all boxes if they need to be
     dataSourceBox.update();
-    systemSettingsBox.update();
-    guiScaleBox.update();
     serialBox.update();
     bleBox.update();
     dataLogBox.update();
@@ -346,6 +346,9 @@ class ControlPanel {
     sdBox.update();
     rcBox.update();
     initBox.update();
+
+    systemSettingsBox.update();
+    guiScaleBox.update();
 
     channelPopup.update();
     serialList.updateMenu();
@@ -946,8 +949,15 @@ class ControlPanel {
 
     if (setGUIScaleFactor.isMouseHere() && setGUIScaleFactor.wasPressed) {
       String scaleFactorString = cp5.get(Textfield.class, "guiScaleFactor").getText();
-      float newScaleFactor = parseFloat(scaleFactorString);
-      output("Set scale factor to " + newScaleFactor);
+      try {
+        float newScaleFactor = parseFloat(scaleFactorString);
+        guiScaleFactor = newScaleFactor;
+        output("Set scale factor to " + guiScaleFactor);
+        guiScaleFactorReset();
+      }
+      catch(Exception e) {
+        output("Error: Failed to parse new float (e.g. 100.0). Current scale factor: " + guiScaleFactor + ".");
+      }
     }
 
     if (chanButton8.isMouseHere() && chanButton8.wasPressed) {
