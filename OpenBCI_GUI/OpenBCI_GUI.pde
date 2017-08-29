@@ -405,10 +405,14 @@ void udpReceiveHandler(byte[] data, String ip, int portRX){
     char c = value.charAt(4);
    if ( c>= '0' && c <= '9'){
       println("Found a valid UDP STIM of value: "+int(c)+" chr: "+c);
+// The next 2 lines are to test the packet timing 
 //      markerAvailable = true;
 //      markerValue = int(c);
-        openBCI.serial_openBCI.write('`');
-        openBCI.serial_openBCI.write(c-(int)'0');
+
+// Commenting this out for now - See todo below:
+// Todo: Before blasting out this message we need to 1) confirm firmware version of the OpenBCI board 2) confirm it is in streaming mode.
+//        openBCI.serial_openBCI.write('`');
+//        openBCI.serial_openBCI.write(c-(int)'0');
     } else {
       println("Warning:invalid UDP STIM of value: "+int(c));
     }
