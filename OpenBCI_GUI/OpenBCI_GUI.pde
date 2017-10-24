@@ -15,7 +15,7 @@
 //   with the ControlP5 library that is included with this GitHub repository
 //
 //   No warranty. Use at your own risk. Use for whatever you'd like.
-//
+//   dev UDP-Makers
 ////////////////////////////////////////////////////////////////////////////////
 import ddf.minim.*;  // To make sound.  Following minim example "frequencyModulation"
 import ddf.minim.ugens.*; // To make sound.  Following minim example "frequencyModulation"
@@ -262,6 +262,10 @@ Robot rob3115;
 
 PApplet ourApplet;
 
+// For UDP markers
+UDP udpRX;
+
+
 //------------------------------------------------------------------------
 //                       Global Functions
 //------------------------------------------------------------------------
@@ -362,10 +366,55 @@ void setup() {
   buttonHelpText = new ButtonHelpText();
 
   myPresentation = new Presentation();
+  
+  // Setup the UDP receiver 
+  int portRX = 51000;  // the UDP receiving port
+  String ip = "127.0.0.1";  // localhost for now
+  
+  //create new object for receiving 
+  udpRX=new UDP(this,portRX,ip);
+  udpRX.setReceiveHandler("udpReceiveHandler");
+  udpRX.log(true);
+  udpRX.listen(true);
+
+  //confirm if rx is multicast 
+  println("Is RX mulitcast: "+udpRX.isMulticast());
+  println("Has RX joined multicast: "+udpRX.isJoined());
+
 
   timeOfSetup = millis(); //keep track of time when setup is finished... used to make sure enough time has passed before creating some other objects (such as the Ganglion instance)
 }
 //====================== END-OF-SETUP ==========================//
+
+//====================UDP Packet Handler==========================//
+// This function handles the received UDP packet 
+// See the documentation for the Java UDP class here:
+// https://ubaa.net/shared/processing/udp/udp_class_udp.htm
+
+String udpReceiveString = null;
+
+void udpReceiveHandler(byte[] data, String ip, int portRX){
+  
+  String value=new String(data);
+  println(value+" from: "+ip+" and port: "+portRX);
+  if (value.length() >=5  && value.indexOf("STIM") >= 0){
+    char c = value.charAt(4);
+   if ( c>= '0' && c <= '9'){
+      println("Found a valid UDP STIM of value: "+int(c)+" chr: "+c);
+// The next 2 lines are to test the packet timing 
+//      markerAvailable = true;
+//      markerValue = int(c);
+
+// Commenting this out for now - See todo below:
+// Todo: Before blasting out this message we need to 1) confirm firmware version of the OpenBCI board 2) confirm it is in streaming mode.
+//        openBCI.serial_openBCI.write('`');
+//        openBCI.serial_openBCI.write(c-(int)'0');
+    } else {
+      println("Warning:invalid UDP STIM of value: "+int(c));
+    }
+  }
+}
+
 
 //======================== DRAW LOOP =============================//
 
