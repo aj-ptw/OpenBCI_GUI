@@ -61,6 +61,7 @@ boolean midInit = false;
 boolean abandonInit = false;
 
 final int NCHAN_CYTON = 8;
+final int NCHAN_NEXUS = 8;
 final int NCHAN_CYTON_DAISY = 16;
 final int NCHAN_GANGLION = 4;
 
@@ -107,8 +108,6 @@ String openBCI_portName = "N/A";  //starts as N/A but is selected from control p
 int openBCI_baud = 115200; //baud rate from the Arduino
 
 String ganglion_portName = "N/A";
-
-String wifi_portName = "N/A";
 
 String wifi_portName = "N/A";
 

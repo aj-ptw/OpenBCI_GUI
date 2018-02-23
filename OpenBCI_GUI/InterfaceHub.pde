@@ -73,6 +73,7 @@ class Hub {
   final static String TCP_CMD_DATA = "t";
   final static String TCP_CMD_ERROR = "e"; //<>// //<>//
   final static String TCP_CMD_EXAMINE = "x"; //<>// //<>//
+  final static String TCP_CMD_FLOW = "f";
   final static String TCP_CMD_IMPEDANCE = "i";
   final static String TCP_CMD_LOG = "l";
   final static String TCP_CMD_PROTOCOL = "p";
@@ -323,6 +324,9 @@ class Hub {
         break;
       case 'x':
         processExamine(msg);
+        break;
+      case 'f':
+        processFlow(msg);
         break;
       case 's': // Scan
         processScan(msg);
@@ -630,6 +634,8 @@ class Hub {
             case OUTPUT_SOURCE_ODF:
               if (eegDataSource == DATASOURCE_GANGLION) {
                 fileoutput_odf.writeRawData_dataPacket(dataPacketBuff[curDataPacketInd], ganglion.get_scale_fac_uVolts_per_count(), ganglion.get_scale_fac_accel_G_per_count(), stopByte);
+              } else if (eegDataSource == DATASOURCE_NEXUS) {
+                fileoutput_odf.writeRawData_dataPacket(dataPacketBuff[curDataPacketInd], nexus.get_scale_fac_uVolts_per_count(), nexus.get_scale_fac_accel_G_per_count(), stopByte);
               } else {
                 fileoutput_odf.writeRawData_dataPacket(dataPacketBuff[curDataPacketInd], cyton.get_scale_fac_uVolts_per_count(), cyton.get_scale_fac_accel_G_per_count(), stopByte);
               }
@@ -699,6 +705,27 @@ class Hub {
         break;
       default:
         handleError(code, list[2]);
+        break;
+    }
+  }
+
+  /**
+   * @description Sends a command to ganglion board
+   */
+  public void sendFlow(String s) {
+    println("Hub: sendFlow(String): sending \'" + s + "\'");
+    write(TCP_CMD_FLOW + "," + s + TCP_STOP);
+  }
+
+  public void processFlow(String msg) {
+    String[] list = split(msg, ',');
+    int code = Integer.parseInt(list[1]);
+    switch (code) {
+      case RESP_SUCCESS:
+        println("Hub: processFlow: success -- " + millis());
+        break;
+      default:
+        println("Hub: processFlow: ERROR -- " + millis() + " " + list[2]);
         break;
     }
   }

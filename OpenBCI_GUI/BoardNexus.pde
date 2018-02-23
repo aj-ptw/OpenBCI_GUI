@@ -7,11 +7,7 @@
 // continuously (once started).  This class defaults to using binary transfer
 // for normal operation.
 //
-// Created: Chip Audette, Oct 2013
-// Modified: through April 2014
-// Modified again: Conor Russomanno Sept-Oct 2014
-// Modified for Daisy (16-chan) OpenBCI V3: Conor Russomanno Nov 2014
-// Modified Daisy Behaviors: Chip Audette Dec 2014
+// Created: AJ Keller, Feb 2018
 //
 // Note: this class now expects the data format produced by OpenBCI V3.
 //
@@ -20,49 +16,10 @@
 import java.io.OutputStream; //for logging raw bytes to an output file
 
 //------------------------------------------------------------------------
-//                       Global Variables & Instances
-//------------------------------------------------------------------------
-
-final char command_stop = 's';
-// final String command_startText = "x";
-final char command_startBinary = 'b';
-final char command_startBinary_wAux = 'n';  // already doing this with 'b' now
-final char command_startBinary_4chan = 'v';  // not necessary now
-final char command_activateFilters = 'f';  // swithed from 'F' to 'f'  ... but not necessary because taken out of hardware code
-final char command_deactivateFilters = 'g';  // not necessary anymore
-
-final String command_setMode = "/";  // this is used to set the board into different modes
-
-final char[] command_deactivate_channel = {'1', '2', '3', '4', '5', '6', '7', '8', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i'};
-final char[] command_activate_channel = {'!', '@', '#', '$', '%', '^', '&', '*', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I'};
-
-int channelDeactivateCounter = 0; //used for re-deactivating channels after switching settings...
-
-final int BOARD_MODE_DEFAULT = 0;
-final int BOARD_MODE_DEBUG = 1;
-final int BOARD_MODE_ANALOG = 2;
-final int BOARD_MODE_DIGITAL = 3;
-final int BOARD_MODE_MARKER = 4;
-
-//everything below is now deprecated...
-// final String[] command_activate_leadoffP_channel = {'!', '@', '#', '$', '%', '^', '&', '*'};  //shift + 1-8
-// final String[] command_deactivate_leadoffP_channel = {'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I'};   //letters (plus shift) right below 1-8
-// final String[] command_activate_leadoffN_channel = {'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K'}; //letters (plus shift) below the letters below 1-8
-// final String[] command_deactivate_leadoffN_channel = {'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<'};   //letters (plus shift) below the letters below the letters below 1-8
-// final String command_biasAuto = "`";
-// final String command_biasFixed = "~";
-
-// ArrayList defaultChannelSettings;
-
-//here is the routine that listens to the serial port.
-//if any data is waiting, get it, parse it, and stuff it into our vector of
-//pre-allocated dataPacketBuff
-
-//------------------------------------------------------------------------
 //                       Classes
 //------------------------------------------------------------------------
 
-class Cyton {
+class Nexus {
 
   private int nEEGValuesPerPacket = 8; //defined by the data format sent by cyton boards
   private int nAuxValuesPerPacket = 3; //defined by the data format sent by cyton boards
@@ -80,12 +37,8 @@ class Cyton {
   private int prevSampleIndex = 0;
   private int serialErrorCounter = 0;
 
-  private final int fsHzSerialCyton = 250;  //sample rate used by OpenBCI board...set by its Arduino code
-  private final int fsHzSerialCytonDaisy = 125;  //sample rate used by OpenBCI board...set by its Arduino code
-  private final int fsHzWifi = 1000;  //sample rate used by OpenBCI board...set by its Arduino code
-  private final int NfftSerialCyton = 256;
-  private final int NfftSerialCytonDaisy = 256;
-  private final int NfftWifi = 1024;
+  private final int fsHzWifi = 250;  //sample rate used by OpenBCI board...set by its Arduino code
+  private final int NfftWifi = 256;
   private final float ADS1299_Vref = 4.5f;  //reference voltage for ADC in ADS1299.  set by its hardware
   private float ADS1299_gain = 24.0;  //assumed gain setting for ADS1299.  set by its Arduino code
   private float openBCI_series_resistor_ohms = 2200; // Ohms. There is a series resistor on the 32 bit board.
@@ -108,38 +61,18 @@ class Cyton {
   public int hardwareSyncStep = 0; //start this at 0...
   private long timeOfLastCommand = 0; //used when sync'ing to hardware
 
-  private int curInterface = INTERFACE_SERIAL;
+  private int curInterface = INTERFACE_HUB_WIFI;
   private int sampleRate = fsHzWifi;
   PApplet mainApplet;
 
   //some get methods
   public float getSampleRate() {
-    if (isSerial()) {
-      if (nchan == NCHAN_CYTON_DAISY) {
-        return fsHzSerialCytonDaisy;
-      } else {
-        return fsHzSerialCyton;
-      }
-    } else {
-      return hub.getSampleRate();
-    }
+    return fsHzWifi;
   }
 
   // TODO: ADJUST getNfft for new sample variable sample rates
   public int getNfft() {
-    if (isWifi()) {
-      if (sampleRate == fsHzSerialCyton) {
-        return NfftSerialCyton;
-      } else {
-        return NfftWifi;
-      }
-    } else {
-      if (nchan == NCHAN_CYTON_DAISY) {
-        return NfftSerialCytonDaisy;
-      } else {
-        return NfftSerialCyton;
-      }
-    }
+    return NfftWifi;
   }
   public int getBoardMode() {
     return curBoardMode;
@@ -173,46 +106,23 @@ class Cyton {
     return defaultChannelSettings;
   }
 
-  public void setBoardMode(int boardMode) {
-    hub.sendCommand("/" + boardMode);
-    curBoardMode = boardMode;
-    print("Cyton: setBoardMode to :" + curBoardMode);
-  }
 
-  public void setSampleRate(int _sampleRate) {
-    sampleRate = _sampleRate;
-    output("Setting sample rate for Cyton to " + sampleRate + "Hz");
-    println("Setting sample rate for Cyton to " + sampleRate + "Hz");
-    hub.setSampleRate(sampleRate);
-  }
 
   public boolean setInterface(int _interface) {
     curInterface = _interface;
     // println("current interface: " + curInterface);
     println("setInterface: curInterface: " + getInterface());
-    if (isWifi()) {
-      setSampleRate((int)fsHzWifi);
-      hub.setProtocol(PROTOCOL_WIFI);
-    } else if (isSerial()) {
-      setSampleRate((int)fsHzSerialCyton);
-      hub.setProtocol(PROTOCOL_SERIAL);
-    }
+    hub.setProtocol(PROTOCOL_WIFI);
     return true;
   }
 
   //constructors
-  Cyton() {
+  Nexus() {
   };  //only use this if you simply want access to some of the constants
-  Cyton(PApplet applet, String comPort, int baud, int nEEGValuesPerOpenBCI, boolean useAux, int nAuxValuesPerOpenBCI, int _interface) {
-    curInterface = _interface;
+  Nexus(PApplet applet) {
+    curInterface = INTERFACE_HUB_WIFI;
 
-    initDataPackets(nEEGValuesPerOpenBCI, nAuxValuesPerOpenBCI);
-
-    if (isSerial()) {
-      hub.connectSerial(comPort);
-    } else if (isWifi()) {
-      hub.connectWifi(comPort);
-    }
+    initDataPackets(nEEGValuesPerPacket, nAuxValuesPerPacket);
   }
 
   public void initDataPackets(int _nEEGValuesPerPacket, int _nAuxValuesPerPacket) {
@@ -241,97 +151,8 @@ class Cyton {
     }
   }
 
-  public int closeSDandPort() {
-    closeSDFile();
-    return closePort();
-  }
-
   public int closePort() {
-    if (isSerial()) {
-      return hub.disconnectSerial();
-    } else {
-      return hub.disconnectWifi();
-    }
-  }
-
-  public int closeSDFile() {
-    println("Closing any open SD file. Writing 'j' to OpenBCI.");
-    if (isPortOpen()) write('j'); // tell the SD file to close if one is open...
-    delay(100); //make sure 'j' gets sent to the board
-    return 0;
-  }
-
-  public void syncWithHardware(int sdSetting) {
-    switch (hardwareSyncStep) {
-      case 1: //send # of channels (8 or 16) ... (regular or daisy setup)
-        println("Cyton: syncWithHardware: [1] Sending channel count (" + nchan + ") to OpenBCI...");
-        if (nchan == 8) {
-          write('c');
-        }
-        if (nchan == 16) {
-          write('C', false);
-        }
-        break;
-      case 2: //reset hardware to default registers
-        println("Cyton: syncWithHardware: [2] Reseting OpenBCI registers to default... writing \'d\'...");
-        write('d'); // TODO: Why does this not get a $$$ readyToSend = false?
-        break;
-      case 3: //ask for series of channel setting ASCII values to sync with channel setting interface in GUI
-        println("Cyton: syncWithHardware: [3] Retrieving OpenBCI's channel settings to sync with GUI... writing \'D\'... waiting for $$$...");
-        write('D', false); //wait for $$$ to iterate... applies to commands expecting a response
-        break;
-      case 4: //check existing registers
-        println("Cyton: syncWithHardware: [4] Retrieving OpenBCI's full register map for verification... writing \'?\'... waiting for $$$...");
-        write('?', false); //wait for $$$ to iterate... applies to commands expecting a response
-        break;
-      case 5:
-        // write("j"); // send OpenBCI's 'j' commaned to make sure any already open SD file is closed before opening another one...
-        switch (sdSetting) {
-          case 1: //"5 min max"
-            write('A', false); //wait for $$$ to iterate... applies to commands expecting a response
-            break;
-          case 2: //"5 min max"
-            write('S', false); //wait for $$$ to iterate... applies to commands expecting a response
-            break;
-          case 3: //"5 min max"
-            write('F', false); //wait for $$$ to iterate... applies to commands expecting a response
-            break;
-          case 4: //"5 min max"
-            write('G', false); //wait for $$$ to iterate... applies to commands expecting a response
-            break;
-          case 5: //"5 min max"
-            write('H', false); //wait for $$$ to iterate... applies to commands expecting a response
-            break;
-          case 6: //"5 min max"
-            write('J', false); //wait for $$$ to iterate... applies to commands expecting a response
-            break;
-          case 7: //"5 min max"
-            write('K', false); //wait for $$$ to iterate... applies to commands expecting a response
-            break;
-          case 8: //"5 min max"
-            write('L', false); //wait for $$$ to iterate... applies to commands expecting a response
-            break;
-          default:
-            break; // Do Nothing
-        }
-        println("Cyton: syncWithHardware: [5] Writing selected SD setting (" + sdSettingString + ") to OpenBCI...");
-        //final hacky way of abandoning initiation if someone selected daisy but doesn't have one connected.
-        if(abandonInit){
-          haltSystem();
-          output("No daisy board present. Make sure you selected the correct number of channels.");
-          controlPanel.open();
-          abandonInit = false;
-        }
-        break;
-      case 6:
-        output("Cyton: syncWithHardware: The GUI is done intializing. Click outside of the control panel to interact with the GUI.");
-        hub.changeState(hub.STATE_STOPPED);
-        systemMode = 10;
-        controlPanel.close();
-        topNav.controlPanelCollapser.setIsActive(false);
-        //renitialize GUI if nchan has been updated... needs to be built
-        break;
-    }
+    return hub.disconnectWifi();
   }
 
   public void writeCommand(String val) {
@@ -372,7 +193,7 @@ class Cyton {
 
   private boolean isSerial () {
     // println("My interface is " + curInterface);
-    return curInterface == INTERFACE_SERIAL;
+    return false;
   }
 
   private boolean isWifi () {
@@ -381,17 +202,8 @@ class Cyton {
 
   public void startDataTransfer() {
     if (isPortOpen()) {
-      // Now give the command to start binary data transmission
-      if (isSerial()) {
-        hub.changeState(hub.STATE_NORMAL);  // make sure it's now interpretting as binary
-        println("Cyton: startDataTransfer(): writing \'" + command_startBinary + "\' to the serial port...");
-        // if (isSerial()) iSerial.clear();  // clear anything in the com port's buffer
-        write(command_startBinary);
-      } else if (isWifi()) {
-        println("Cyton: startDataTransfer(): writing \'" + command_startBinary + "\' to the wifi shield...");
-        write(command_startBinary);
-      }
-
+      hub.sendFlow(hub.TCP_ACTION_START);
+      println("Nexus: startDataTransfer(): writing start stream to the nexus device shield...");
     } else {
       println("port not open");
     }
@@ -400,33 +212,11 @@ class Cyton {
   public void stopDataTransfer() {
     if (isPortOpen()) {
       hub.changeState(hub.STATE_STOPPED);  // make sure it's now interpretting as binary
-      println("Cyton: startDataTransfer(): writing \'" + command_stop + "\' to the serial port...");
-      write(command_stop);// + "\n");
+      hub.sendFlow(hub.TCP_ACTION_STOP);
+      println("Nexus: stopDataTransfer(): writing stop stream to the nexus device shield...");
     }
   }
 
-  public void printRegisters() {
-    if (isPortOpen()) {
-      println("Cyton: printRegisters(): Writing ? to OpenBCI...");
-      write('?');
-    }
-  }
-
-  /* **** Borrowed from Chris Viegl from his OpenBCI parser for BrainBay
-   Modified by Joel Murphy and Conor Russomanno to read OpenBCI data
-   Packet Parser for OpenBCI (1-N channel binary format):
-   3-byte data values are stored in 'little endian' formant in AVRs
-   so this protocol parser expects the lower bytes first.
-   Start Indicator: 0xA0
-   EXPECTING STANDARD PACKET LENGTH DON'T NEED: Packet_length  : 1 byte  (length = 4 bytes framenumber + 4 bytes per active channel + (optional) 4 bytes for 1 Aux value)
-   Framenumber     : 1 byte (Sequential counter of packets)
-   Channel 1 data  : 3 bytes
-   ...
-   Channel 8 data  : 3 bytes
-   Aux Values      : UP TO 6 bytes
-   End Indcator    : 0xC0
-   TOTAL OF 33 bytes ALL DAY
-   ********************************************************************* */
   private int nDataValuesInPacket = 0;
   private int localByteCounter=0;
   private int localChannelCounter=0;
@@ -458,24 +248,6 @@ class Cyton {
           // gui.cc.powerDownChannel(Ichan);
           w_timeSeries.hsc.powerDownChannel(Ichan);
         }
-      }
-    }
-  }
-
-  //deactivate an EEG channel...channel counting is zero through nchan-1
-  public void deactivateChannel(int Ichan) {
-    if (isPortOpen()) {
-      if ((Ichan >= 0) && (Ichan < command_deactivate_channel.length)) {
-        write(command_deactivate_channel[Ichan]);
-      }
-    }
-  }
-
-  //activate an EEG channel...channel counting is zero through nchan-1
-  public void activateChannel(int Ichan) {
-    if (isPortOpen()) {
-      if ((Ichan >= 0) && (Ichan < command_activate_channel.length)) {
-        write(command_activate_channel[Ichan]);
       }
     }
   }

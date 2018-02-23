@@ -35,6 +35,9 @@ CallbackListener cb = new CallbackListener() { //used by ControlP5 to clear text
     } else if (cp5.isMouseOver(cp5.get(Textfield.class, "fileNameGanglion"))){
       println("CallbackListener: controlEvent: clearing ganglion");
       cp5.get(Textfield.class, "fileNameGanglion").clear();
+    } else if (cp5.isMouseOver(cp5.get(Textfield.class, "fileNameNexus"))){
+      println("CallbackListener: controlEvent: clearing nexus");
+      cp5.get(Textfield.class, "fileNameNexus").clear();
     }
   }
 };
@@ -307,6 +310,8 @@ class ControlPanel {
   BLEBox bleBox;
   DataLogBoxGanglion dataLogBoxGanglion;
 
+  DataLogBoxNexus dataLogBoxNexus;
+
   WifiBox wifiBox;
   InterfaceBoxCyton interfaceBoxCyton;
   InterfaceBoxGanglion interfaceBoxGanglion;
@@ -389,6 +394,9 @@ class ControlPanel {
     sampleRateGanglionBox = new SampleRateGanglionBox(x + w, (dataLogBoxGanglion.y + dataLogBoxGanglion.h), w, h, globalPadding);
     latencyGanglionBox = new LatencyGanglionBox(x + w, (sampleRateGanglionBox.y + sampleRateGanglionBox.h), w, h, globalPadding);
     wifiTransferProtcolGanglionBox = new WifiTransferProtcolGanglionBox(x + w, (latencyGanglionBox.y + latencyGanglionBox.h), w, h, globalPadding);
+
+    // Nexus
+    dataLogBoxNexus = new DataLogBoxNexus(x + w, dataSourceBox.y, w, h, globalPadding);
   }
 
   public void resetListItems(){
