@@ -217,6 +217,7 @@ public void controlEvent(ControlEvent theEvent) {
         controlPanel.hideAllBoxes();
         output("Protocol WiFi Selected for Nexus");
         if (hub.isPortOpen()) hub.closePort();
+        hub.setBoardType("nexus");
         nexus.setInterface(INTERFACE_HUB_WIFI);
       } else {
         outputWarn("Please wait till hub is fully initalized");
