@@ -56,7 +56,7 @@ void setupWidgets(PApplet _this, ArrayList<Widget> w){
     addWidget(w_ganglionImpedance, w);
     addWidget(w_networking, w);
     addWidget(w_accelerometer, w);
-  } else {
+  } else if (eegDataSource == DATASOURCE_CYTON) {
     addWidget(w_accelerometer, w);
     addWidget(w_networking, w);
   }
@@ -85,7 +85,7 @@ void setupWidgets(PApplet _this, ArrayList<Widget> w){
   // println("  setupWidgets focus widget -- " + millis());
 
   //only instantiate this widget if you are using a Cyton board for live streaming
-  if(eegDataSource != DATASOURCE_GANGLION){
+  if(eegDataSource != DATASOURCE_GANGLION && eegDataSource != DATASOURCE_NEXUS){
     w_pulsesensor = new W_PulseSensor(_this);
     w_pulsesensor.setTitle("Pulse Sensor");
     addWidget(w_pulsesensor, w);

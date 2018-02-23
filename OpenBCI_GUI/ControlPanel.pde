@@ -81,6 +81,10 @@ Button autoFileNameGanglion;
 Button outputODFGanglion;
 Button outputBDFGanglion;
 
+Button autoFileNameNexus;
+Button outputODFNexus;
+Button outputBDFNexus;
+
 Button chanButton8;
 Button chanButton16;
 Button selectPlaybackFile;
@@ -165,8 +169,8 @@ public void controlEvent(ControlEvent theEvent) {
     }
 
     protocolBLEGanglion.color_notPressed = autoFileName.color_notPressed;
-    protocolWifiGanglion.color_notPressed = autoFileName.color_notPressed;
     protocolWifiCyton.color_notPressed = autoFileName.color_notPressed;
+    protocolWifiGanglion.color_notPressed = autoFileName.color_notPressed;
     protocolSerialCyton.color_notPressed = autoFileName.color_notPressed;
 
     eegDataSource = newDataSource; // reset global eegDataSource to the selected value from the list
@@ -174,6 +178,7 @@ public void controlEvent(ControlEvent theEvent) {
 
     ganglion.setInterface(INTERFACE_NONE);
     cyton.setInterface(INTERFACE_NONE);
+    nexus.setInterface(INTERFACE_NONE);
 
     if(newDataSource == DATASOURCE_CYTON){
       updateToNChan(8);
@@ -201,6 +206,18 @@ public void controlEvent(ControlEvent theEvent) {
       wifiInternetProtocolGanglionUDP.color_notPressed = autoFileName.color_notPressed;
       wifiInternetProtocolGanglionUDPBurst.color_notPressed = autoFileName.color_notPressed;
       hub.setWifiInternetProtocol(hub.TCP);
+    } else if (newDataSource == DATASOURCE_NEXUS){
+      updateToNChan(8);
+      if (isHubObjectInitialized) {
+        wifiList.items.clear();
+        bleList.items.clear();
+        controlPanel.hideAllBoxes();
+        output("Protocol WiFi Selected for Nexus");
+        if (hub.isPortOpen()) hub.closePort();
+        nexus.setInterface(INTERFACE_HUB_WIFI);
+      } else {
+        outputWarn("Please wait till hub is fully initalized");
+      }
     } else if(newDataSource == DATASOURCE_PLAYBACKFILE){
       updateToNChan(8);
       playbackChanButton4.color_notPressed = autoFileName.color_notPressed;
@@ -453,7 +470,7 @@ class ControlPanel {
         }
       }
 
-      if (ganglion.getInterface() == INTERFACE_HUB_WIFI || cyton.getInterface() == INTERFACE_HUB_WIFI) {
+      if (ganglion.getInterface() == INTERFACE_HUB_WIFI || cyton.getInterface() == INTERFACE_HUB_WIFI  || nexus.getInterface() == INTERFACE_HUB_WIFI) {
         if (!calledForWifiList) {
           calledForWifiList = true;
           if (hub.isHubRunning()) {
@@ -598,6 +615,18 @@ class ControlPanel {
           cp5.get(Textfield.class, "fileName").setVisible(false); //make sure the data file field is visible
           cp5.get(Textfield.class, "fileNameGanglion").setVisible(true); //make sure the data file field is visible
         }
+      } else if (eegDataSource == DATASOURCE_NEXUS) {
+        wifiBox.draw();
+        cp5.get(MenuList.class, "wifiList").setVisible(true);
+        if(wcBox.isShowing){
+          wcBox.draw();
+        }
+        dataLogBoxNexus.draw();
+
+        cp5.get(Textfield.class, "fileName").setVisible(false); //make sure the data file field is not visible
+        cp5.get(Textfield.class, "fileNameGanglion").setVisible(false); //make sure the data file field is not visible
+        cp5.get(Textfield.class, "fileNameNexus").setVisible(false); //make sure the data file field is visible
+
       } else {
         //set other CP5 controllers invisible
         hideAllBoxes();
@@ -666,8 +695,9 @@ class ControlPanel {
   public void hideAllBoxes() {
     //set other CP5 controllers invisible
     //
-    cp5.get(Textfield.class, "fileName").setVisible(false); //make sure the data file field is visible
+    cp5.get(Textfield.class, "fileName").setVisible(false);
     cp5.get(Textfield.class, "fileNameGanglion").setVisible(false); //make sure the data file field is visible
+    cp5.get(Textfield.class, "fileNameNexus").setVisible(false); //make sure the data file field is visible
     cp5.get(MenuList.class, "serialList").setVisible(false);
     cp5.get(MenuList.class, "bleList").setVisible(false);
     cp5.get(MenuList.class, "sdTimes").setVisible(false);
@@ -1000,6 +1030,35 @@ class ControlPanel {
         }
       }
 
+      if (eegDataSource == DATASOURCE_NEXUS) {
+        // This is where we check for button presses if we are searching for BLE devices
+
+        if (autoFileNameNexus.isMouseHere()) {
+          autoFileNameNexus.setIsActive(true);
+          autoFileNameNexus.wasPressed = true;
+        }
+
+        if (outputODFNexus.isMouseHere()) {
+          outputODFNexus.setIsActive(true);
+          outputODFNexus.wasPressed = true;
+          outputODFNexus.color_notPressed = isSelected_color;
+          outputBDFNexus.color_notPressed = autoFileName.color_notPressed; //default color of button
+        }
+
+        if (outputBDFNexus.isMouseHere()) {
+          outputBDFNexus.setIsActive(true);
+          outputBDFNexus.wasPressed = true;
+          outputBDFNexus.color_notPressed = isSelected_color;
+          outputODFNexus.color_notPressed = autoFileName.color_notPressed; //default color of button
+        }
+
+        if (refreshWifi.isMouseHere()) {
+          refreshWifi.setIsActive(true);
+          refreshWifi.wasPressed = true;
+        }
+      }
+
+
       //active buttons during DATASOURCE_PLAYBACKFILE
       if (eegDataSource == DATASOURCE_PLAYBACKFILE) {
         if (selectPlaybackFile.isMouseHere()) {
@@ -1303,6 +1362,21 @@ class ControlPanel {
       outputDataSource = OUTPUT_SOURCE_BDF;
     }
 
+    if (autoFileNameNexus.isMouseHere() && autoFileNameNexus.wasPressed) {
+      output("Autogenerated Nexus \"File Name\" based on current date/time");
+      cp5.get(Textfield.class, "fileNameNexus").setText(getDateString());
+    }
+
+    if (outputODFNexus.isMouseHere() && outputODFNexus.wasPressed) {
+      output("Output has been set to OpenBCI Data Format");
+      outputDataSource = OUTPUT_SOURCE_ODF;
+    }
+
+    if (outputBDFNexus.isMouseHere() && outputBDFNexus.wasPressed) {
+      output("Output has been set to BDF+ (biosemi data format based off EDF)");
+      outputDataSource = OUTPUT_SOURCE_BDF;
+    }
+
     if (chanButton8.isMouseHere() && chanButton8.wasPressed) {
       updateToNChan(8);
     }
@@ -1443,6 +1517,12 @@ class ControlPanel {
     outputBDFGanglion.wasPressed = false;
     outputODFGanglion.setIsActive(false);
     outputODFGanglion.wasPressed = false;
+    autoFileNameNexus.setIsActive(false);
+    autoFileNameNexus.wasPressed = false;
+    outputBDFNexus.setIsActive(false);
+    outputBDFNexus.wasPressed = false;
+    outputODFNexus.setIsActive(false);
+    outputODFNexus.wasPressed = false;
     chanButton8.setIsActive(false);
     chanButton8.wasPressed = false;
     sampleRate200.setIsActive(false);
@@ -1532,6 +1612,11 @@ public void initButtonPressed(){
         initSystemButton.wasPressed = false;
         initSystemButton.setIsActive(false);
         return;
+      } else if (eegDataSource == DATASOURCE_NEXUS && nexus.getInterface() == INTERFACE_HUB_WIFI && wifi_portName == "N/A") {
+        output("No Nexus device selected. Please select your Nexus device and retry system initiation.");
+        initSystemButton.wasPressed = false;
+        initSystemButton.setIsActive(false);
+        return;
       } else if (eegDataSource == -1) {//if no data source selected
         output("No DATA SOURCE selected. Please select a DATA SOURCE and retry system initiation.");//tell user they must select a data source before initiating system
         initSystemButton.wasPressed = false;
@@ -1552,11 +1637,18 @@ public void initButtonPressed(){
           if (ganglion.isPortOpen()) {
             ganglion.closePort();
           }
+        } else if(eegDataSource == DATASOURCE_NEXUS){
+          verbosePrint("ControlPanel — port is open: " + nexus.isPortOpen());
+          if (nexus.isPortOpen()) {
+            nexus.closePort();
+          }
         }
         if(eegDataSource == DATASOURCE_GANGLION){
           fileName = cp5.get(Textfield.class, "fileNameGanglion").getText(); // store the current text field value of "File Name" to be passed along to dataFiles
         } else if(eegDataSource == DATASOURCE_CYTON){
           fileName = cp5.get(Textfield.class, "fileName").getText(); // store the current text field value of "File Name" to be passed along to dataFiles
+        } else if(eegDataSource == DATASOURCE_NEXUS){
+          fileName = cp5.get(Textfield.class, "fileNameNexus").getText(); // store the current text field value of "File Name" to be passed along to dataFiles
         }
         midInit = true;
         println("initSystem yoo");
@@ -1570,6 +1662,7 @@ public void initButtonPressed(){
       initSystemButton.setString("START SYSTEM");
       cp5.get(Textfield.class, "fileName").setText(getDateString()); //creates new data file name so that you don't accidentally overwrite the old one
       cp5.get(Textfield.class, "fileNameGanglion").setText(getDateString()); //creates new data file name so that you don't accidentally overwrite the old one
+      cp5.get(Textfield.class, "fileNameNexus").setText(getDateString()); //creates new data file name so that you don't accidentally overwrite the old one
       haltSystem();
     }
 }
@@ -1583,6 +1676,7 @@ void updateToNChan(int _nchan) {
   hub.initDataPackets(_nchan, 3);
   ganglion.initDataPackets(_nchan, 3);
   cyton.initDataPackets(_nchan, 3);
+  nexus.initDataPackets(_nchan, 3);
   updateChannelArrays(nchan); //make sure to reinitialize the channel arrays with the right number of channels
 }
 
@@ -1617,6 +1711,7 @@ class DataSourceBox {
     sourceList.setPosition(x + padding, y + padding*2 + 13);
     sourceList.addItem(makeItem("LIVE (from Cyton)"));
     sourceList.addItem(makeItem("LIVE (from Ganglion)"));
+    sourceList.addItem(makeItem("LIVE (from Nexus)"));
     sourceList.addItem(makeItem("PLAYBACK (from file)"));
     sourceList.addItem(makeItem("SYNTHETIC (algorithmic)"));
 
@@ -1808,7 +1903,7 @@ class WifiBox {
     refreshWifi.draw();
     popOutWifiConfigButton.draw();
 
-    if(isHubInitialized && isHubObjectInitialized && (ganglion.isWifi() || cyton.isWifi()) && hub.isSearching()){
+    if(isHubInitialized && isHubObjectInitialized && (ganglion.isWifi() || cyton.isWifi() || nexus.isWifi()) && hub.isSearching()){
       image(loadingGIF_blue, w + 225,  y + padding*4 + 72 + 10, 20, 20);
       refreshWifi.setString("SEARCHING...");
     } else {
@@ -2045,6 +2140,80 @@ class DataLogBoxGanglion {
     outputODFGanglion.draw();
     outputBDFGanglion.but_y = y + padding*2 + 18 + 58;
     outputBDFGanglion.draw();
+  }
+};
+
+class DataLogBoxNexus {
+  int x, y, w, h, padding; //size and position
+  String fileName;
+  //text field for inputing text
+  //create/open/closefile button
+  String fileStatus;
+  boolean isFileOpen; //true if file has been activated and is ready to write to
+  //String port status;
+
+  DataLogBoxNexus(int _x, int _y, int _w, int _h, int _padding) {
+    x = _x;
+    y = _y;
+    w = _w;
+    h = 127; // Added 24 +
+    padding = _padding;
+    //instantiate button
+    //figure out default file name (from Chip's code)
+    isFileOpen = false; //set to true on button push
+    fileStatus = "NO FILE CREATED";
+
+    //button to autogenerate file name based on time/date
+    autoFileNameNexus = new Button (x + padding, y + 66, w-(padding*2), 24, "AUTOGENERATE FILE NAME", fontInfo.buttonLabel_size);
+    outputODFNexus = new Button (x + padding, y + padding*2 + 18 + 58, (w-padding*3)/2, 24, "OpenBCI", fontInfo.buttonLabel_size);
+    if (outputDataSource == OUTPUT_SOURCE_ODF) outputODFNexus.color_notPressed = isSelected_color; //make it appear like this one is already selected
+    outputBDFNexus = new Button (x + padding*2 + (w-padding*3)/2, y + padding*2 + 18 + 58, (w-padding*3)/2, 24, "BDF+", fontInfo.buttonLabel_size);
+    if (outputDataSource == OUTPUT_SOURCE_BDF) outputODFNexus.color_notPressed = isSelected_color; //make it appear like this one is already selected
+
+
+    cp5.addTextfield("fileNameNexus")
+      .setPosition(x + 90, y + 32)
+      .setCaptionLabel("")
+      .setSize(157, 26)
+      .setFont(f2)
+      .setFocus(false)
+      .setColor(color(26, 26, 26))
+      .setColorBackground(color(255, 255, 255)) // text field bg color
+      .setColorValueLabel(color(0, 0, 0))  // text color
+      .setColorForeground(isSelected_color)  // border color when not selected
+      .setColorActive(isSelected_color)  // border color when selected
+      .setColorCursor(color(26, 26, 26))
+      .setText(getDateString())
+      .align(5, 10, 20, 40)
+      .onDoublePress(cb)
+      .setAutoClear(true);
+
+    //clear text field on double click
+  }
+
+  public void update() {
+  }
+
+  public void draw() {
+    pushStyle();
+    fill(boxColor);
+    stroke(boxStrokeColor);
+    strokeWeight(1);
+    rect(x, y, w, h);
+    fill(bgColor);
+    textFont(h3, 16);
+    textAlign(LEFT, TOP);
+    text("DATA LOG FILE", x + padding, y + padding);
+    textFont(p4, 14);;
+    text("File Name", x + padding, y + padding*2 + 14);
+    popStyle();
+    cp5.get(Textfield.class, "fileNameNexus").setPosition(x + 90, y + 32);
+    autoFileNameNexus.but_y = y + 66;
+    autoFileNameNexus.draw();
+    outputODFNexus.but_y = y + padding*2 + 18 + 58;
+    outputODFNexus.draw();
+    outputBDFNexus.but_y = y + padding*2 + 18 + 58;
+    outputBDFNexus.draw();
   }
 };
 

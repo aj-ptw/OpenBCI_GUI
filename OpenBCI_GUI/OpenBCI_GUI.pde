@@ -77,8 +77,9 @@ UDP udpRX;
 //choose where to get the EEG data
 final int DATASOURCE_CYTON = 0; // new default, data from serial with Accel data CHIP 2014-11-03
 final int DATASOURCE_GANGLION = 1;  //looking for signal from OpenBCI board via Serial/COM port, no Aux data
-final int DATASOURCE_PLAYBACKFILE = 2;  //playback from a pre-recorded text file
-final int DATASOURCE_SYNTHETIC = 3;  //Synthetically generated data
+final int DATASOURCE_NEXUS = 2;  //looking for signal from OpenBCI board via Serial/COM port, no Aux data
+final int DATASOURCE_PLAYBACKFILE = 3;  //playback from a pre-recorded text file
+final int DATASOURCE_SYNTHETIC = 4;  //Synthetically generated data
 public int eegDataSource = -1; //default to none of the options
 
 final int INTERFACE_NONE = -1; // Used to indicate no choice made yet on interface
@@ -97,6 +98,7 @@ int nextPlayback_millis = -100; //any negative number
 // Initialize boards for constants
 Cyton cyton = new Cyton(); //dummy creation to get access to constants, create real one later
 Ganglion ganglion = new Ganglion(); //dummy creation to get access to constants, create real one later
+Nexus nexus = new Nexus();
 // Intialize interface protocols
 InterfaceSerial iSerial = new InterfaceSerial();
 Hub hub = new Hub(); //dummy creation to get access to constants, create real one later
@@ -105,6 +107,8 @@ String openBCI_portName = "N/A";  //starts as N/A but is selected from control p
 int openBCI_baud = 115200; //baud rate from the Arduino
 
 String ganglion_portName = "N/A";
+
+String wifi_portName = "N/A";
 
 String wifi_portName = "N/A";
 
@@ -699,6 +703,9 @@ void initSystem() {
         hub.connectWifi(wifi_portName);
       }
       break;
+    case DATASOURCE_NEXUS:
+      hub.connectWifi(wifi_portName);
+      break;
     default:
       break;
     }
@@ -719,6 +726,7 @@ void initSystem() {
     //open data file
     if (eegDataSource == DATASOURCE_CYTON) openNewLogFile(fileName);  //open a new log file
     if (eegDataSource == DATASOURCE_GANGLION) openNewLogFile(fileName); // println("open ganglion output file");
+    if (eegDataSource == DATASOURCE_NEXUS) openNewLogFile(fileName); // println("open nexus output file");
 
     // wm = new WidgetManager(this);
     setupWidgetManager();
@@ -730,7 +738,7 @@ void initSystem() {
       nextPlayback_millis = millis(); //used for synthesizeData and readFromFile.  This restarts the clock that keeps the playback at the right pace.
       w_timeSeries.hsc.loadDefaultChannelSettings();
 
-      if (eegDataSource != DATASOURCE_GANGLION && eegDataSource != DATASOURCE_CYTON) {
+      if (eegDataSource != DATASOURCE_GANGLION && eegDataSource != DATASOURCE_CYTON && eegDataSource != DATASOURCE_NEXUS) {
         systemMode = SYSTEMMODE_POSTINIT; //tell system it's ok to leave control panel and start interfacing GUI
       }
       if (!abandonInit) {
@@ -763,6 +771,8 @@ float getSampleRateSafe() {
     return ganglion.getSampleRate();
   } else if (eegDataSource == DATASOURCE_CYTON){
     return cyton.getSampleRate();
+  } else if (eegDataSource == DATASOURCE_NEXUS){
+    return nexus.getSampleRate();
   } else if (eegDataSource == DATASOURCE_PLAYBACKFILE) {
     return playbackData_table.getSampleRate();
   } else {
@@ -795,6 +805,10 @@ void startRunning() {
   if (eegDataSource == DATASOURCE_GANGLION) {
     if (ganglion != null) {
       ganglion.startDataTransfer();
+    }
+  } else if (eegDataSource == DATASOURCE_NEXUS) {
+    if (nexus != null) {
+      nexus.startDataTransfer();
     }
   } else {
     if (cyton != null) {
@@ -890,6 +904,7 @@ void haltSystem() {
   openBCI_portName = "N/A";  // Fixes inability to reconnect after halding  JAM 1/2017
   ganglion_portName = "N/A";
   wifi_portName = "N/A";
+  wifi_portName = "N/A";
 
   controlPanel.resetListItems();
 
@@ -904,6 +919,10 @@ void haltSystem() {
     }
     closeLogFile();  //close log file
     ganglion.closePort();
+  }
+  if (eegDataSource == DATASOURCE_NEXUS) {
+    closeLogFile();  //close log file
+    nexus.closePort();
   }
   systemMode = SYSTEMMODE_PREINIT;
   hub.changeState(hub.STATE_NOCOM);
@@ -1067,29 +1086,32 @@ void systemDraw() { //for drawing to the screen
 
       //update the title of the figure;
       switch (eegDataSource) {
-      case DATASOURCE_CYTON:
-        switch (outputDataSource) {
-        case OUTPUT_SOURCE_ODF:
-          surface.setTitle(int(frameRate) + " fps, " + int(float(fileoutput_odf.getRowsWritten())/getSampleRateSafe()) + " secs Saved, Writing to " + output_fname);
+        case DATASOURCE_CYTON:
+          switch (outputDataSource) {
+            case OUTPUT_SOURCE_ODF:
+              surface.setTitle(int(frameRate) + " fps, " + int(float(fileoutput_odf.getRowsWritten())/getSampleRateSafe()) + " secs Saved, Writing to " + output_fname);
+              break;
+            case OUTPUT_SOURCE_BDF:
+              surface.setTitle(int(frameRate) + " fps, " + int(fileoutput_bdf.getRecordsWritten()) + " secs Saved, Writing to " + output_fname);
+              break;
+            case OUTPUT_SOURCE_NONE:
+            default:
+              surface.setTitle(int(frameRate) + " fps");
+              break;
+          }
           break;
-        case OUTPUT_SOURCE_BDF:
-          surface.setTitle(int(frameRate) + " fps, " + int(fileoutput_bdf.getRecordsWritten()) + " secs Saved, Writing to " + output_fname);
+        case DATASOURCE_SYNTHETIC:
+          surface.setTitle(int(frameRate) + " fps, Using Synthetic EEG Data");
           break;
-        case OUTPUT_SOURCE_NONE:
-        default:
-          surface.setTitle(int(frameRate) + " fps");
+        case DATASOURCE_PLAYBACKFILE:
+          surface.setTitle(int(frameRate) + " fps, Playing " + int(float(currentTableRowIndex)/getSampleRateSafe()) + " of " + int(float(playbackData_table.getRowCount())/getSampleRateSafe()) + " secs, Reading from: " + playbackData_fname);
           break;
-        }
-        break;
-      case DATASOURCE_SYNTHETIC:
-        surface.setTitle(int(frameRate) + " fps, Using Synthetic EEG Data");
-        break;
-      case DATASOURCE_PLAYBACKFILE:
-        surface.setTitle(int(frameRate) + " fps, Playing " + int(float(currentTableRowIndex)/getSampleRateSafe()) + " of " + int(float(playbackData_table.getRowCount())/getSampleRateSafe()) + " secs, Reading from: " + playbackData_fname);
-        break;
-      case DATASOURCE_GANGLION:
-        surface.setTitle(int(frameRate) + " fps, Ganglion!");
-        break;
+        case DATASOURCE_GANGLION:
+          surface.setTitle(int(frameRate) + " fps, Ganglion!");
+          break;
+        case DATASOURCE_NEXUS:
+            surface.setTitle(int(frameRate) + " fps, Nexus!");
+            break;
       }
     }
 

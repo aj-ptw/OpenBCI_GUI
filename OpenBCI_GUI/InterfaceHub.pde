@@ -48,7 +48,7 @@ void clientEvent(Client someClient) {
             controlPanel.wifiBox.refreshWifiList();
           }
         }
-      } else if (eegDataSource == DATASOURCE_CYTON) {
+      } else if (eegDataSource == DATASOURCE_CYTON || eegDataSource == DATASOURCE_NEXUS) {
         // Do stuff for cyton
         hub.parseMessage(msg);
         // Check to see if the ganglion ble list needs to be updated
@@ -527,7 +527,7 @@ class Hub {
       String[] list = split(msg, ',');
       int code = Integer.parseInt(list[1]);
       int stopByte = 0xC0; //<>//
-      if ((eegDataSource == DATASOURCE_GANGLION || eegDataSource == DATASOURCE_CYTON) && systemMode == 10 && isRunning) { //<>//
+      if ((eegDataSource == DATASOURCE_GANGLION || eegDataSource == DATASOURCE_CYTON || eegDataSource == DATASOURCE_NEXUS) && systemMode == 10 && isRunning) { //<>//
         if (Integer.parseInt(list[1]) == RESP_SUCCESS_DATA_SAMPLE) {
           // Sample number stuff
           dataPacket.sampleIndex = int(Integer.parseInt(list[2]));
