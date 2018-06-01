@@ -1517,16 +1517,17 @@ class Stream extends Thread{
         outlet_data.push_chunk(dataToSend);
       // Serial
       }else if (this.protocol.equals("Serial")){     // Send NORMALIZED EMG CHANNEL Data over Serial ... %%%%%
-        for (int i=0;i<numChan;i++){
-          serialMessage = ""; //clear message
-          String isFocused = Boolean.toString(w_focus.isFocused);
-          serialMessage += isFocused;
-          try{
-            println(serialMessage);
-            this.serial_networking.write(serialMessage);
-          }catch (Exception e){
-            println(e);
-          }
+        serialMessage = "";
+        if (w_focus.isFocused) {
+          serialMessage = "1";
+        } else {
+          serialMessage = "0";
+        }
+        try{
+          // println(serialMessage);
+          this.serial_networking.write(serialMessage);
+        }catch (Exception e){
+          println(e);
         }
       }
     }
